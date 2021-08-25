@@ -440,6 +440,7 @@ public class SystemJournal {
                                 if (attempt.get() >= config.getMaxJournalWriteAttempts()) {
                                     throw new CompletionException(ex);
                                 }
+                                log.warn("SystemJournal[{}] Error while writing journal {}.", containerId, getSystemJournalChunkName(containerId, epoch, currentFileIndex.get()));
                                 // In case of partial write during previous failure, this time we'll get InvalidOffsetException.
                                 // In that case we start a new journal file and retry.
                                 if (ex instanceof InvalidOffsetException) {
@@ -830,6 +831,7 @@ public class SystemJournal {
                     }
 
                     // Process one file at a time.
+                    val scanAttempt = new AtomicInteger();
                     val isScanDone = new AtomicBoolean();
                     return Futures.loop(
                             () -> !isScanDone.get(),
@@ -838,10 +840,19 @@ public class SystemJournal {
                                 return chunkStorage.exists(systemLogName)
                                         .thenComposeAsync(exists -> {
                                             if (!exists) {
-                                                // File does not exist. We have reached end of our scanning.
-                                                isScanDone.set(true);
-                                                log.debug("SystemJournal[{}] Done applying journal operations for epoch={}. Last journal index={}",
+                                                // File does not exist.
+                                                log.debug("SystemJournal[{}] Journal does not exist for epoch={}. Last journal index={}",
                                                         containerId, epochToRecover.get(), fileIndexToRecover.get());
+                                                if (scanAttempt.incrementAndGet() > config.getMaxJournalWriteAttempts()) {
+                                                    // We have reached end of our scanning.
+                                                    isScanDone.set(true);
+                                                    log.debug("SystemJournal[{}] Done applying journal operations for epoch={}. Last journal index={}",
+                                                            containerId, epochToRecover.get(), fileIndexToRecover.get());
+                                                } else {
+                                                    // continue trying next files.
+                                                    fileIndexToRecover.incrementAndGet();
+                                                    state.filesProcessedCount.incrementAndGet();
+                                                }
                                                 return CompletableFuture.completedFuture(null);
                                             } else {
                                                 journalsProcessed.add(systemLogName);

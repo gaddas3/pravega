@@ -594,6 +594,7 @@ public class SystemJournalOperationsTests extends ThreadPooledTestSuite {
         testContext.setConfig(ChunkedSegmentStorageConfig.DEFAULT_CONFIG.toBuilder()
                 .maxJournalUpdatesPerSnapshot(2)
                 .garbageCollectionDelay(Duration.ZERO)
+                .maxJournalWriteAttempts(100)
                 .selfCheckEnabled(true)
                 .build());
         val testSegmentName = testContext.segmentNames[0];
@@ -665,7 +666,7 @@ public class SystemJournalOperationsTests extends ThreadPooledTestSuite {
             for (val prime2 : primes) {
                 FlakyChunkStorage flakyChunkStorage = new FlakyChunkStorage(executorService());
                 flakyChunkStorage.interceptor.flakyPredicates.add(FlakinessPredicate.builder()
-                        .method("doRead.before")
+                        .method(interceptMethod1)
                         .matchPredicate(n -> n % prime1 == 0)
                         .matchRegEx("_sysjournal")
                         .action(() -> {
@@ -673,7 +674,7 @@ public class SystemJournalOperationsTests extends ThreadPooledTestSuite {
                         })
                         .build());
                 flakyChunkStorage.interceptor.flakyPredicates.add(FlakinessPredicate.builder()
-                        .method("doWrite.before")
+                        .method(interceptMethod2)
                         .matchPredicate(n -> n % prime2 == 0)
                         .matchRegEx("_sysjournal")
                         .action(() -> {
@@ -1466,6 +1467,28 @@ public class SystemJournalOperationsTests extends ThreadPooledTestSuite {
             interceptor.intercept(handle.getChunkName(), "doWrite.before");
             val ret = super.doWrite(handle, offset, length, data);
             interceptor.intercept(handle.getChunkName(), "doWrite.after");
+            return ret;
+        }
+
+        @Override
+        protected ChunkHandle doCreateWithContent(String chunkName, int length, InputStream data) throws ChunkStorageException {
+            interceptor.intercept(chunkName, "doWrite.before");
+            ChunkHandle handle = super.doCreate(chunkName);
+            int bytesWritten = super.doWrite(handle, 0, length, data);
+            if (bytesWritten < length) {
+                super.doDelete(ChunkHandle.writeHandle(chunkName));
+                throw new ChunkStorageException(chunkName, "doCreateWithContent - invalid length returned");
+            }
+            val ret = handle;
+            interceptor.intercept(chunkName, "doWrite.after");
+            return ret;
+        }
+
+        @Override
+        protected ChunkHandle doCreate(String chunkName) throws ChunkStorageException, IllegalArgumentException {
+            interceptor.intercept(chunkName, "doWrite.before");
+            val ret = super.doCreate(chunkName);
+            interceptor.intercept(chunkName, "doWrite.after");
             return ret;
         }
 
