@@ -700,7 +700,7 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
     /**
      * Adds block index entries for given chunk.
      */
-    void addBlockIndexEntriesForChunk(MetadataTransaction txn, String segmentName, String chunkName, long chunkStartOffset, long fromOffset, long toOffset) {
+    boolean addBlockIndexEntriesForChunk(MetadataTransaction txn, String segmentName, String chunkName, long chunkStartOffset, long fromOffset, long toOffset) {
         Preconditions.checkState(chunkStartOffset <= fromOffset,
                 "chunkStartOffset must be less than or equal to fromOffset. Segment=%s Chunk=%s chunkStartOffset=%s fromOffset=%s",
                 segmentName, chunkName, chunkStartOffset, fromOffset);
@@ -708,6 +708,7 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
                 segmentName, chunkName, toOffset, fromOffset);
         val blockSize = config.getIndexBlockSize();
         val startBlock = fromOffset / blockSize;
+        boolean isEntryAdded = false;
         // For each block start that falls on this chunk, add block index entry.
         for (long blockStartOffset = startBlock * blockSize; blockStartOffset < toOffset; blockStartOffset += blockSize) {
             if (blockStartOffset >= chunkStartOffset) {
@@ -718,9 +719,11 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
                         .status(StatusFlags.ACTIVE)
                         .build();
                 txn.create(blockEntry);
+                isEntryAdded = true;
                 log.debug("{} adding new block index entry segment={}, entry={}.", logPrefix, segmentName, blockEntry);
             }
         }
+        return isEntryAdded;
     }
 
     /**

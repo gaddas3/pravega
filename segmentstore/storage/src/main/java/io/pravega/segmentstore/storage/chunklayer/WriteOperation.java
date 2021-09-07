@@ -67,7 +67,6 @@ class WriteOperation implements Callable<CompletableFuture<Void>> {
     private final List<ChunkNameOffsetPair> newReadIndexEntries = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger chunksAddedCount = new AtomicInteger();
 
-    private volatile boolean isCommitted = false;
     private volatile SegmentMetadata segmentMetadata;
     private volatile boolean isSystemSegment;
 
@@ -81,6 +80,7 @@ class WriteOperation implements Callable<CompletableFuture<Void>> {
     private final AtomicLong currentOffset = new AtomicLong();
 
     private volatile boolean didSegmentLayoutChange = false;
+    private volatile boolean isBlockIndexEntryAdded = false;
 
     WriteOperation(ChunkedSegmentStorage chunkedSegmentStorage, SegmentHandle handle, long offset, InputStream data, int length) {
         this.handle = handle;
@@ -115,6 +115,10 @@ class WriteOperation implements Callable<CompletableFuture<Void>> {
 
                                 // Check if this is a first write after ownership changed.
                                 isFirstWriteAfterFailover = segmentMetadata.isOwnershipChanged();
+
+                                if (length == 0) {
+                                    return CompletableFuture.completedFuture(null);
+                                }
 
                                 lastChunkMetadata.set(null);
                                 chunkHandle = null;
@@ -199,8 +203,14 @@ class WriteOperation implements Callable<CompletableFuture<Void>> {
         }
 
         // if layout did not change then commit with lazyWrite.
-        return txn.commit(!didSegmentLayoutChange && chunkedSegmentStorage.getConfig().isLazyCommitEnabled())
-                .thenRunAsync(() -> isCommitted = true, chunkedSegmentStorage.getExecutor());
+        val shouldLazyCommit = !didSegmentLayoutChange && !isBlockIndexEntryAdded && chunkedSegmentStorage.getConfig().isLazyCommitEnabled();
+        if (shouldLazyCommit) {
+            Preconditions.checkArgument(txn.getData().size() == 2
+                    && txn.getData().containsKey(segmentMetadata.getName())
+                    && txn.getData().containsKey(segmentMetadata.getLastChunk()),
+                    "Cannot lazy commit. Only last chunk can be modified.");
+        }
+        return txn.commit(shouldLazyCommit);
 
     }
 
@@ -230,7 +240,7 @@ class WriteOperation implements Callable<CompletableFuture<Void>> {
                                 .thenRunAsync(() -> {
                                     // Update block index.
                                     if (!segmentMetadata.isStorageSystemSegment()) {
-                                        chunkedSegmentStorage.addBlockIndexEntriesForChunk(txn,
+                                        isBlockIndexEntryAdded = chunkedSegmentStorage.addBlockIndexEntriesForChunk(txn,
                                                 segmentMetadata.getName(),
                                                 chunkHandle.getChunkName(),
                                                 segmentMetadata.getLastChunkStartOffset(),
