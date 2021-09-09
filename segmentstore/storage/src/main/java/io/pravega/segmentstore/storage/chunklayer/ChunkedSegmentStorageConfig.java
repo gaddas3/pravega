@@ -42,6 +42,7 @@ public class ChunkedSegmentStorageConfig {
     public static final Property<Long> READ_INDEX_BLOCK_SIZE = Property.named("readindex.block.size", 1024 * 1024L);
     public static final Property<Boolean> APPENDS_ENABLED = Property.named("appends.enable", true);
     public static final Property<Boolean> LAZY_COMMIT_ENABLED = Property.named("commit.lazy.enable", true);
+    public static final Property<Integer> LAZY_COMMIT_EVICTION_TIMEOUT = Property.named("commit.lazy.eviction.timeout.minutes", 15);
     public static final Property<Boolean> INLINE_DEFRAG_ENABLED = Property.named("defrag.inline.enable", true);
     public static final Property<Long> DEFAULT_ROLLOVER_SIZE = Property.named("metadata.rollover.size.bytes.max", 128 * 1024 * 1024L);
     public static final Property<Integer> SELF_CHECK_LATE_WARNING_THRESHOLD = Property.named("self.check.late", 100);
@@ -73,6 +74,7 @@ public class ChunkedSegmentStorageConfig {
             .maxIndexedChunks(16 * 1024)
             .appendEnabled(true)
             .lazyCommitEnabled(true)
+            .lazyCommitEvictionTimeout(Duration.ofMinutes(15))
             .inlineDefragEnabled(true)
             .lateWarningThresholdInMillis(100)
             .garbageCollectionDelay(Duration.ofSeconds(60))
@@ -157,6 +159,9 @@ public class ChunkedSegmentStorageConfig {
      */
     @Getter
     final private boolean lazyCommitEnabled;
+
+    @Getter
+    final private Duration lazyCommitEvictionTimeout;
 
     /**
      * Whether the inline defrag functionality is enabled or disabled.
@@ -255,6 +260,7 @@ public class ChunkedSegmentStorageConfig {
     ChunkedSegmentStorageConfig(TypedProperties properties) throws ConfigurationException {
         this.appendEnabled = properties.getBoolean(APPENDS_ENABLED);
         this.lazyCommitEnabled = properties.getBoolean(LAZY_COMMIT_ENABLED);
+        this.lazyCommitEvictionTimeout = Duration.ofMinutes(properties.getInt(LAZY_COMMIT_EVICTION_TIMEOUT));
         this.inlineDefragEnabled = properties.getBoolean(INLINE_DEFRAG_ENABLED);
         this.maxBufferSizeForChunkDataTransfer = properties.getInt(MAX_BUFFER_SIZE_FOR_APPENDS);
         // Don't use appends for concat when appends are disabled.

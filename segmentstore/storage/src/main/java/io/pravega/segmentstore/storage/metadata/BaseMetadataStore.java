@@ -21,6 +21,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalCause;
+import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.ConcurrentHashMultiset;
 import io.pravega.common.ObjectBuilder;
 import io.pravega.common.Timer;
@@ -167,6 +169,8 @@ abstract public class BaseMetadataStore implements ChunkMetadataStore {
      */
     private final Cache<String, TransactionData> cache;
 
+    private final Cache<String, List<String>> lazyCommittedCache;
+
     /**
      * Storage executor object.
      */
@@ -226,6 +230,12 @@ abstract public class BaseMetadataStore implements ChunkMetadataStore {
         maxEntriesInCache = config.getMaxEntriesInCache();
         cache = CacheBuilder.newBuilder()
                 .maximumSize(maxEntriesInCache)
+                .build();
+
+        lazyCommittedCache = CacheBuilder.newBuilder()
+                .maximumSize(maxEntriesInTxnBuffer)
+                .expireAfterAccess(config.getLazyCommitEvictionTimeout())
+                .removalListener(this::evictLazyCommittedFromBuffer)
                 .build();
     }
 
@@ -392,9 +402,13 @@ abstract public class BaseMetadataStore implements ChunkMetadataStore {
                     validateCommit(txn, txnData, modifiedKeys, modifiedValues);
                 }, executor)
                 .thenComposeAsync(v -> {
+
+                    if (lazyWrite && txn.getKeysToLock().length == 1 && !modifiedValues.stream().anyMatch(e -> e.isPinned())) {
+                        lazyCommittedCache.put(txn.getKeysToLock()[0], modifiedKeys);
+                    }
                     // Step 3: Commit externally.
                     // This operation may call external storage.
-                    return writeToMetadataStore(lazyWrite, modifiedValues);
+                    return writeToMetadataStore(txn, lazyWrite, modifiedValues);
                 }, executor)
                 .thenComposeAsync(v -> executeExternalCommitAction(txn), executor)
                 .thenRunAsync(() -> {
@@ -422,7 +436,7 @@ abstract public class BaseMetadataStore implements ChunkMetadataStore {
     /**
      * Writes modified values to the metadata store.
      */
-    private CompletableFuture<Void> writeToMetadataStore(boolean lazyWrite, ArrayList<TransactionData> modifiedValues) {
+    private CompletableFuture<Void> writeToMetadataStore(MetadataTransaction txn, boolean lazyWrite, ArrayList<TransactionData> modifiedValues) {
         if (!lazyWrite || (bufferCount.get() > maxEntriesInTxnBuffer)) {
             log.trace("Persisting all modified keys (except pinned)");
             val toWriteList = modifiedValues.stream().filter(entry -> !entry.isPinned()).collect(Collectors.toList());
@@ -440,8 +454,13 @@ abstract public class BaseMetadataStore implements ChunkMetadataStore {
             } else {
                 return CompletableFuture.completedFuture(null);
             }
+        } else {
+            if (lazyWrite && txn.getKeysToLock().length == 1) {
+                val modifiedKeys = modifiedValues.stream().filter(e -> !e.isPinned()).map( e -> e.getKey()).collect(Collectors.toList());
+                lazyCommittedCache.put(txn.getKeysToLock()[0], modifiedKeys);
+            }
+            return CompletableFuture.completedFuture(null);
         }
-        return CompletableFuture.completedFuture(null);
     }
 
     /**
@@ -750,6 +769,13 @@ abstract public class BaseMetadataStore implements ChunkMetadataStore {
         }
         return retValue;
     }
+
+    void evictLazyCommittedFromBuffer(RemovalNotification<String, List<String>> notification) {
+        if (notification.getCause() != RemovalCause.REPLACED) {
+            evictFromBuffer(notification.getValue());
+        }
+    }
+
 
     @VisibleForTesting
     long getBufferCount() {

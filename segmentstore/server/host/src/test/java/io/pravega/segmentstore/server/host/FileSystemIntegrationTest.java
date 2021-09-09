@@ -63,6 +63,7 @@ public class FileSystemIntegrationTest extends BookKeeperIntegrationTestBase {
                                 .maxJournalUpdatesPerSnapshot(5)
                                 .garbageCollectionDelay(Duration.ofMillis(10))
                                 .garbageCollectionSleep(Duration.ofMillis(10))
+                                .lazyCommitEvictionTimeout(Duration.ofMillis(10))
                                 .selfCheckEnabled(true)
                                 .build(),
                                 setup.getConfig(FileSystemStorageConfig::builder),
