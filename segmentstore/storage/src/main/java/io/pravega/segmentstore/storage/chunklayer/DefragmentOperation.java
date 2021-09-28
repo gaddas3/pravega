@@ -223,10 +223,24 @@ class DefragmentOperation implements Callable<CompletableFuture<Void>> {
             concatArgs[i] = ConcatArgument.fromChunkInfo(chunksToConcat.get(i));
         }
         final CompletableFuture<Integer> f;
-        if ((!useAppend.get() && chunkedSegmentStorage.getChunkStorage().supportsConcat()) || !chunkedSegmentStorage.shouldAppend()) {
+
+        if (!useAppend.get() && chunkedSegmentStorage.getChunkStorage().supportsConcat()) {
+            for (int i = 0; i < chunksToConcat.size()-1; i++) {
+                Preconditions.checkState(concatArgs[i].getLength() < chunkedSegmentStorage.getConfig().getMinSizeLimitForConcat()
+                        && concatArgs[i].getLength() > chunkedSegmentStorage.getConfig().getMinSizeLimitForConcat());
+            }
             f = chunkedSegmentStorage.getChunkStorage().concat(concatArgs);
         } else {
-            f = concatUsingAppend(concatArgs);
+            if (chunkedSegmentStorage.shouldAppend()) {
+                f = concatUsingAppend(concatArgs);
+            } else {
+                if (chunkedSegmentStorage.getChunkStorage().supportsConcat()
+                        && concatArgs[0].getLength() > chunkedSegmentStorage.getConfig().getMinSizeLimitForConcat()) {
+                    f = concatUsingTailConcat(concatArgs);
+                } else {
+                    f = concatUsingCreateWithContent(concatArgs);
+                }
+            }
         }
 
         return f.thenComposeAsync(v -> {
@@ -266,6 +280,7 @@ class DefragmentOperation implements Callable<CompletableFuture<Void>> {
     }
 
     private CompletableFuture<Void> gatherChunks() {
+        val isLastChunkSmall = new AtomicBoolean();
         return txn.get(targetChunkName)
                 .thenComposeAsync(storageMetadata -> {
                     target = (ChunkMetadata) storageMetadata;
@@ -276,16 +291,21 @@ class DefragmentOperation implements Callable<CompletableFuture<Void>> {
                     chunksToConcat.add(new ChunkInfo(targetSizeAfterConcat.get(), targetChunkName));
 
                     nextChunkName = target.getNextChunk();
+                    // Skip over when first chunk is smaller than min size.
+                    if (!chunkedSegmentStorage.shouldAppend() && target.getLength() <= chunkedSegmentStorage.getConfig().getMinSizeLimitForConcat()) {
+                        return CompletableFuture.completedFuture(null);
+                    }
+                    // Skip over when first chunk is greater than max size.
+                    if (!chunkedSegmentStorage.shouldAppend() && target.getLength() > chunkedSegmentStorage.getConfig().getMaxSizeLimitForConcat()) {
+                        return CompletableFuture.completedFuture(null);
+                    }
                     return txn.get(nextChunkName)
                             .thenComposeAsync(storageMetadata1 -> {
 
                                 next = (ChunkMetadata) storageMetadata1;
                                 // Gather list of chunks that can be appended together.
                                 return Futures.loop(
-                                        () ->
-                                                null != nextChunkName
-                                                        && !(useAppend.get() && chunkedSegmentStorage.getConfig().getMinSizeLimitForConcat() < next.getLength())
-                                                        && !(targetSizeAfterConcat.get() + next.getLength() > segmentMetadata.getMaxRollinglength() || next.getLength() > chunkedSegmentStorage.getConfig().getMaxSizeLimitForConcat()),
+                                        () -> shouldContinue(),
                                         () -> txn.get(nextChunkName)
                                                 .thenAcceptAsync(storageMetadata2 -> {
                                                     next = (ChunkMetadata) storageMetadata2;
@@ -298,6 +318,66 @@ class DefragmentOperation implements Callable<CompletableFuture<Void>> {
 
                             }, chunkedSegmentStorage.getExecutor());
                 }, chunkedSegmentStorage.getExecutor());
+    }
+
+    private boolean shouldContinue() {
+        if (null == nextChunkName) {
+            return false;
+        }
+        if (next.getLength() > chunkedSegmentStorage.getConfig().getMaxSizeLimitForConcat()
+                || targetSizeAfterConcat.get() + next.getLength() > segmentMetadata.getMaxRollinglength()) {
+            return false;
+        }
+        if (!chunkedSegmentStorage.shouldAppend()) {
+            if (targetSizeAfterConcat.get() > chunkedSegmentStorage.getConfig().getMaxSizeLimitForConcat()
+                        || next.getLength() > chunkedSegmentStorage.getConfig().getMaxSizeLimitForConcat()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private CompletableFuture<Integer> concatUsingCreateWithContent(ConcatArgument[] concatArgs) {
+        int total = 0;
+        for (int i = 0; i < concatArgs.length; i++) {
+            total += concatArgs[i].getLength();
+        }
+        val toRet = total;
+        val readBuffer = new byte[total];
+
+        val futures = new ArrayList<CompletableFuture<Integer>>();
+        int offset = 0;
+        for (int i = 0; i < concatArgs.length; i++) {
+            val offsetToReadAt = offset;
+            futures.add(chunkedSegmentStorage.getChunkStorage().read(ChunkHandle.readHandle(concatArgs[i].getName()),
+                     0, Math.toIntExact(concatArgs[i].getLength()), readBuffer, offsetToReadAt));
+            offset += concatArgs[i].getLength();
+        }
+
+        return Futures.allOf(futures)
+                .thenComposeAsync( v -> chunkedSegmentStorage.getChunkStorage().createWithContent(concatArgs[0].getName(), toRet, new ByteArrayInputStream(readBuffer)), chunkedSegmentStorage.getExecutor())
+                .thenApplyAsync(v -> toRet, chunkedSegmentStorage.getExecutor());
+    }
+
+    private CompletableFuture<Integer> concatUsingTailConcat(ConcatArgument[] concatArgs) {
+        currentArgIndex.set(1);
+        val length = new AtomicLong(concatArgs[0].getLength());
+        return Futures.loop(() -> currentArgIndex.get() < concatArgs.length,
+                        () -> {
+                            val args = new ConcatArgument[2];
+                            args[0] = ConcatArgument.builder()
+                                    .name(concatArgs[0].getName())
+                                    .length(length.get())
+                                    .build();
+                            args[1] = concatArgs[currentArgIndex.get()];
+                            return chunkedSegmentStorage.getChunkStorage().concat(args)
+                                    .thenRunAsync(() -> {
+                                        length.addAndGet(concatArgs[currentArgIndex.get()].getLength());
+                                        currentArgIndex.incrementAndGet();
+                                    }, chunkedSegmentStorage.getExecutor());
+                        },
+                        chunkedSegmentStorage.getExecutor())
+                .thenApplyAsync(v -> 0, chunkedSegmentStorage.getExecutor());
     }
 
     private CompletableFuture<Integer> concatUsingAppend(ConcatArgument[] concatArgs) {
