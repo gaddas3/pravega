@@ -46,7 +46,7 @@ public class StorageLoader {
             val factories = factoryCreator.getStorageFactories();
             for (val factoryInfo : factories) {
                 log.info("Loading {}, trying {}", storageImplementation, factoryInfo);
-                if (factoryInfo.getName().equals(storageImplementation)
+                if (factoryInfo.getName().equals("EXTENDEDS3")
                         && factoryInfo.getStorageLayoutType() == storageLayoutType) {
                     StorageFactory factory = factoryCreator.createFactory(factoryInfo, setup, executor);
                     if (!noOpConfig.isStorageNoOpMode()) {

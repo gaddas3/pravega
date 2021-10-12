@@ -46,7 +46,7 @@ public class S3StorageFactoryCreator implements StorageFactoryCreator {
     public StorageFactoryInfo[] getStorageFactories() {
         return new StorageFactoryInfo[]{
                 StorageFactoryInfo.builder()
-                        .name("S3")
+                        .name("EXTENDEDS3")
                         .storageLayoutType(StorageLayoutType.CHUNKED_STORAGE)
                         .build()
         };

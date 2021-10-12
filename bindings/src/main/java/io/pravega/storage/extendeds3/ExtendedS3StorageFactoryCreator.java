@@ -45,11 +45,11 @@ public class ExtendedS3StorageFactoryCreator implements StorageFactoryCreator {
     public StorageFactoryInfo[] getStorageFactories() {
         return new StorageFactoryInfo[]{
                 StorageFactoryInfo.builder()
-                        .name("EXTENDEDS3")
+                        .name("__EXTENDEDS3")
                         .storageLayoutType(StorageLayoutType.CHUNKED_STORAGE)
                         .build(),
                 StorageFactoryInfo.builder()
-                        .name("EXTENDEDS3")
+                        .name("__EXTENDEDS3")
                         .storageLayoutType(StorageLayoutType.ROLLING_STORAGE)
                         .build()
         };
