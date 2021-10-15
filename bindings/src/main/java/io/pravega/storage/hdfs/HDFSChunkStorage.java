@@ -276,6 +276,15 @@ class HDFSChunkStorage extends BaseChunkStorage {
         }
     }
 
+    @Override
+    protected long doGetUsedSpace(OperationContext opContext) throws ChunkStorageException {
+        try {
+            return this.fileSystem.getUsed();
+        } catch (IOException e) {
+            throw convertException("", "doGetStorageStats", e);
+        }
+    }
+
     //endregion
 
     //region Storage Implementation

@@ -223,6 +223,11 @@ public class ExtendedS3ChunkStorage extends BaseChunkStorage {
         }
     }
 
+    @Override
+    protected long doGetUsedSpace(OperationContext opContext) {
+        return 0;
+    }
+
     private void setPermission(ChunkHandle handle, Permission permission) {
         throw new UnsupportedOperationException("ExtendedS3ChunkStorage does not support ACL");
     }

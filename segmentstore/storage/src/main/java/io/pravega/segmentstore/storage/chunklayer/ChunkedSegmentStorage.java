@@ -31,6 +31,7 @@ import io.pravega.segmentstore.contracts.StreamSegmentSealedException;
 import io.pravega.segmentstore.storage.SegmentHandle;
 import io.pravega.segmentstore.storage.SegmentRollingPolicy;
 import io.pravega.segmentstore.storage.Storage;
+import io.pravega.segmentstore.storage.StorageFullException;
 import io.pravega.segmentstore.storage.StorageNotPrimaryException;
 import io.pravega.segmentstore.storage.metadata.ChunkMetadata;
 import io.pravega.segmentstore.storage.metadata.ChunkMetadataStore;
@@ -66,8 +67,7 @@ import static io.pravega.segmentstore.storage.chunklayer.ChunkStorageMetrics.SLT
 import static io.pravega.segmentstore.storage.chunklayer.ChunkStorageMetrics.SLTS_CREATE_LATENCY;
 import static io.pravega.segmentstore.storage.chunklayer.ChunkStorageMetrics.SLTS_DELETE_COUNT;
 import static io.pravega.segmentstore.storage.chunklayer.ChunkStorageMetrics.SLTS_DELETE_LATENCY;
-import static io.pravega.shared.MetricsNames.STORAGE_METADATA_NUM_CHUNKS;
-import static io.pravega.shared.MetricsNames.STORAGE_METADATA_SIZE;
+import static io.pravega.shared.MetricsNames.*;
 
 /**
  * Implements storage for segments using {@link ChunkStorage} and {@link ChunkMetadataStore}.
@@ -156,6 +156,8 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
 
     private AbstractTaskQueueManager<GarbageCollector.TaskInfo> taskQueue;
 
+    private final AtomicBoolean isStorageFull;
+
     /**
      * Creates a new instance of the ChunkedSegmentStorage class.
      *
@@ -189,6 +191,7 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
                 config,
                 executor);
         this.closed = new AtomicBoolean(false);
+        this.isStorageFull = new AtomicBoolean(false);
         this.reporter = executor.scheduleAtFixedRate(this::report, 1000, 1000, TimeUnit.MILLISECONDS);
     }
 
@@ -355,7 +358,7 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
         return executeSerialized(() -> {
             val traceId = LoggerHelpers.traceEnter(log, "create", streamSegmentName, rollingPolicy);
             val timer = new Timer();
-            log.debug("{} create - started segment={}, rollingPolicy={}, latency={}.", logPrefix, streamSegmentName, rollingPolicy);
+            log.debug("{} create - started segment={}, rollingPolicy={}.", logPrefix, streamSegmentName, rollingPolicy);
             return tryWith(metadataStore.beginTransaction(false, streamSegmentName), txn -> {
                 // Retrieve metadata and make sure it does not exist.
                 return txn.get(streamSegmentName)
@@ -411,6 +414,9 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
         if (null == handle) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("handle must not be null"));
         }
+        if (isStorageFull.get() && !this.systemJournal.isStorageSystemSegment(handle.getSegmentName())) {
+            return CompletableFuture.failedFuture( new StorageFullException(handle.getSegmentName()));
+        }
         return executeSerialized(new WriteOperation(this, handle, offset, data, length), handle.getSegmentName());
     }
 
@@ -430,7 +436,7 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
         return executeSerialized(() -> {
             val traceId = LoggerHelpers.traceEnter(log, "seal", handle);
             Timer timer = new Timer();
-            log.debug("{} seal - started segment={} latency={}.", logPrefix, handle.getSegmentName());
+            log.debug("{} seal - started segment={}.", logPrefix, handle.getSegmentName());
             Preconditions.checkNotNull(handle, "handle");
             String streamSegmentName = handle.getSegmentName();
             Preconditions.checkNotNull(streamSegmentName, "streamSegmentName");
@@ -474,6 +480,9 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
         if (null == sourceSegment) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("sourceSegment must not be null"));
         }
+        if (isStorageFull.get() && !this.systemJournal.isStorageSystemSegment(targetHandle.getSegmentName())) {
+            return CompletableFuture.failedFuture( new StorageFullException(targetHandle.getSegmentName()));
+        }
 
         return executeSerialized(new ConcatOperation(this, targetHandle, offset, sourceSegment), targetHandle.getSegmentName(), sourceSegment);
     }
@@ -516,7 +525,7 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
         }
         return executeSerialized(() -> {
             val traceId = LoggerHelpers.traceEnter(log, "delete", handle);
-            log.debug("{} delete - started segment={}, latency={}.", logPrefix, handle.getSegmentName());
+            log.debug("{} delete - started segment={}.", logPrefix, handle.getSegmentName());
             val timer = new Timer();
             val streamSegmentName = handle.getSegmentName();
             return tryWith(metadataStore.beginTransaction(false, streamSegmentName), txn -> txn.get(streamSegmentName)
@@ -690,6 +699,28 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
         metadataStore.report();
         chunkStorage.report();
         readIndexCache.report();
+        updateStorageStats();
+    }
+
+    private void updateStorageStats() {
+        try {
+            val used = chunkStorage.getUsedSpace().get();
+            log.debug("{} STORAGE USAGE -  used={} total={}.", logPrefix, used, config.getMaxSafeStorageSize());
+            if (used >= config.getMaxSafeStorageSize()) {
+                isStorageFull.set(true);
+                if (!isStorageFull.get()) {
+                    log.warn("{} STORAGE FULL. ENTERING SAFE MODE. Any non-critical writes will be rejected.", logPrefix);
+                }
+                log.warn("{} STORAGE FULL -  used={} total={}.", logPrefix, used, config.getMaxSafeStorageSize());
+            } else {
+                if (isStorageFull.get()) {
+                    log.warn("{} STORAGE AVAILABLE. LEAVING SAFE MODE. Restoring normal writes", logPrefix);
+                }
+            }
+            ChunkStorageMetrics.DYNAMIC_LOGGER.reportGaugeValue(SLTS_STORAGE_USED_BYTES, used);
+        } catch (Exception ex) {
+            log.warn("{} updateStorageStats.", logPrefix, ex);
+        }
     }
 
     @Override

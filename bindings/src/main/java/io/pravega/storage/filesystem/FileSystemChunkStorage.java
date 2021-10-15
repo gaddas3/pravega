@@ -293,6 +293,11 @@ public class FileSystemChunkStorage extends BaseChunkStorage {
         }
     }
 
+    @Override
+    protected long doGetUsedSpace(OperationContext opContext) {
+        return fileSystem.getUsedSpace(Paths.get(config.getRoot()));
+    }
+
     private ChunkStorageException convertExeption(String chunkName, String message, Exception e) {
         if (e instanceof ChunkStorageException) {
             return (ChunkStorageException) e;

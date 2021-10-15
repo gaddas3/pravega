@@ -128,6 +128,10 @@ public class FileSystemWrapper {
         return Files.size(path);
     }
 
+    long getUsedSpace(Path path) {
+        return path.toFile().getTotalSpace() - path.toFile().getUsableSpace();
+    }
+
     /**
      * Sets a file's POSIX permissions by calling {@link Files#setPosixFilePermissions(Path, Set)}.
      * @param path Path to the file.
