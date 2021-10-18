@@ -84,6 +84,7 @@ public abstract class AbstractService implements Service {
     private static final String PRAVEGA_IMAGE_NAME = System.getProperty("pravegaImageName", "pravega");
     private static final String BOOKKEEPER_IMAGE_NAME = System.getProperty("bookkeeperImageName", "bookkeeper");
     private static final String TIER2_NFS = "nfs";
+    private static final String TIER2_CUSTOM = "custom";
     private static final String TIER2_TYPE = System.getProperty("tier2Type", TIER2_NFS);
     private static final String BOOKKEEPER_VERSION = System.getProperty("bookkeeperImageVersion", "latest");
     private static final String ZK_SERVICE_NAME = "zookeeper-client:2181";
@@ -197,9 +198,12 @@ public abstract class AbstractService implements Service {
 
     private Map<String, Object> tier2Spec() {
         final Map<String, Object> spec;
+        log.info("Loading tier2Type = {}", TIER2_TYPE);
         if (TIER2_TYPE.equalsIgnoreCase(TIER2_NFS)) {
             spec = ImmutableMap.of("filesystem", ImmutableMap.of("persistentVolumeClaim",
                                                                  ImmutableMap.of("claimName", "pravega-tier2")));
+        } else if (TIER2_TYPE.equalsIgnoreCase(TIER2_CUSTOM)) {
+            spec = getCustomTier2Config();
         } else {
             // handle other types of tier2 like HDFS and Extended S3 Object Store.
             spec = ImmutableMap.of(TIER2_TYPE, getTier2Config());
@@ -207,10 +211,27 @@ public abstract class AbstractService implements Service {
         return spec;
     }
 
+    private Map<String, Object> getCustomTier2Config() {
+        return ImmutableMap.of("custom",
+                ImmutableMap.<String, Object>builder()
+                .put("options", getTier2Config())
+                .put("env", getTier2Env())
+                .build());
+    }
+
     private Map<String, Object> getTier2Config() {
-        String tier2Config = System.getProperty("tier2Config");
-        checkNotNullOrEmpty(tier2Config, "tier2Config");
-        Map<String, String> split = Splitter.on(',').trimResults().withKeyValueSeparator("=").split(tier2Config);
+        return parseSystemPropertyAsMap("tier2Config");
+    }
+
+    private Map<String, Object> getTier2Env() {
+        return parseSystemPropertyAsMap("tier2Env");
+    }
+
+    private Map<String, Object> parseSystemPropertyAsMap(String systemProperty) {
+        String value = System.getProperty(systemProperty);
+        checkNotNullOrEmpty(value, systemProperty);
+        log.info("Parsing {} = {}", systemProperty, value);
+        Map<String, String> split = Splitter.on(',').trimResults().withKeyValueSeparator("=").split(value);
         return split.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> {
             try {
                 return Integer.parseInt(e.getValue());
