@@ -110,6 +110,7 @@ allprojects {
             force "com.fasterxml.jackson.core:jackson-databind:" + jacksonVersion
             force "org.slf4j:slf4j-api:" + slf4jApiVersion
             force "org.apache.zookeeper:zookeeper:" + apacheZookeeperVersion
+            force "io.netty:netty-buffer:" + nettyVersion
             force "io.netty:netty-common:" + nettyVersion
             force "io.netty:netty-transport:" + nettyVersion
             force "io.netty:netty-handler:" + nettyVersion
