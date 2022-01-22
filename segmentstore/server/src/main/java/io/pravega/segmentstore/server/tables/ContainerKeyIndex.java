@@ -693,9 +693,14 @@ class ContainerKeyIndex implements AutoCloseable {
                 val e = AsyncTableEntryReader.readEntryComponents(inputReader, nextOffset, serializer);
                 val hash = this.keyHasher.hash(e.getKey());
                 // Only add in the tail cache the new entries or the entries whose version is higher than the observed one.
+                log.info("{}: (ISSUE-6539) SIZE OF TAIL-CACHING MAP VERSION TRACKER {}", this.traceObjectId, tailCachePreIndexVersionTracker.size());
+                log.info("{}: (ISSUE-6539) ATTEMPTING TO TAIL-CACHING ENTRY HASH: {}, VERSION: {}, HEADER: {}", this.traceObjectId, hash, e.getVersion(), e.getHeader().toString());
                 if (!tailCachePreIndexVersionTracker.containsKey(hash) || tailCachePreIndexVersionTracker.get(hash) < e.getVersion()) {
+                    log.info("{}: (ISSUE-6539) ACCEPTING ENTRY HASH: {}, VERSION: {}, HEADER: {}", this.traceObjectId, hash, e.getVersion(), e.getHeader().toString());
                     tailCachePreIndexVersionTracker.put(hash, e.getVersion());
                     result.add(hash, nextOffset, e.getHeader().getTotalLength(), e.getHeader().isDeletion());
+                } else {
+                    log.info("{}: (ISSUE-6539) DISCARDING ENTRY HASH: {}, VERSION: {}, HEADER: {}", this.traceObjectId, hash, e.getVersion(), e.getHeader().toString());
                 }
                 // Irrespective of whether the entry is added to the tail updates, set the max processed offset.
                 result.setMaxOffset(nextOffset, e.getHeader().getTotalLength());

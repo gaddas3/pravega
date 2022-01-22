@@ -227,6 +227,7 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
             val timer = new Timer();
             Preconditions.checkNotNull(streamSegmentName, "streamSegmentName");
             log.debug("{} openWrite - started segment={}.", logPrefix, streamSegmentName);
+            log.info("{}: (ISSUE-6539) OPEN WRITE FOR SEGMENT {}", logPrefix, streamSegmentName);
             return tryWith(metadataStore.beginTransaction(false, streamSegmentName),
                     txn -> txn.get(streamSegmentName)
                             .thenComposeAsync(storageMetadata -> {
