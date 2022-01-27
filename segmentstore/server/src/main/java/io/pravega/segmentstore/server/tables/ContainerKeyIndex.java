@@ -963,14 +963,8 @@ class ContainerKeyIndex implements AutoCloseable {
                 log.debug("{}: TableSegment {} is not fully recovered. Queuing 1 task.", traceObjectId, segment.getSegmentId());
                 if (firstTask) {
                     setupRecoveryTask(task);
-                    // Starting at last indexed offset may leave behind the last value of an indexed key that is succeeded
-                    // by an (older) compacted entry of the same key. In that case, there is a risk that the tail cache
-                    // just contains the old version of the key to serve gets. Starting from the last compaction offset
-                    // (or start of the Segment, whatever is max) can remove this risk at the cost of processing more data.
-                    SegmentProperties sp = segment.getInfo();
-                    long lastSafeIndexedOffset = Math.max(sp.getStartOffset(), IndexReader.getCompactionOffset(sp));
-                    assert lastSafeIndexedOffset >= 0;
-                    triggerCacheTailIndex(segment, lastSafeIndexedOffset, task);
+                    assert lastIndexedOffset >= 0;
+                    triggerCacheTailIndex(segment, lastIndexedOffset, task);
                 }
 
                 // A recovery task is registered. Queue behind it.

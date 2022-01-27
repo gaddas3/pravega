@@ -294,6 +294,7 @@ abstract class TableCompactor {
         args.getAll().stream().sorted(Comparator.comparingLong(c -> c.entry.getKey().getVersion()))
                 .forEach(c -> {
                     toWrite.add(c.entry);
+                    System.out.printf("Copying " + c.entry + "%n");
                     generateIndexUpdates(c, totalLength.get(), attributes);
                     totalLength.addAndGet(SERIALIZER.getUpdateLength(c.entry));
                 });
@@ -308,7 +309,9 @@ abstract class TableCompactor {
             // Perform a Segment Append with re-serialized entries (Explicit versions), and atomically update the necessary
             // segment attributes.
             BufferView appendData = SERIALIZER.serializeUpdateWithExplicitVersion(toWrite);
+            System.out.printf("$$$Before writing" + this.segment.getInfo() + "%n");
             result = this.segment.append(appendData, attributes, timer.getRemaining());
+            result.thenRun(() -> System.out.printf("$$$After writing" + this.segment.getInfo() + "%n"));
             log.debug("{}: Compacting {}, CopyCount={}, CopyLength={}.", this.traceLogId, args, toWrite.size(), totalLength);
         }
 
