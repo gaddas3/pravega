@@ -181,10 +181,12 @@ public class FileSystemWrapperTests {
         // Act. Create the file
         FileAttribute<Set<PosixFilePermission>> fileAttributes = PosixFilePermissions.asFileAttribute(FileSystemWrapper.READ_ONLY_PERMISSION);
         fw.createFile(fileAttributes, filePath);
+        System.out.printf("validateSetPermissions before setPermissions file=%s permission=%s %n", filePath, PosixFilePermissions.toString(Files.getPosixFilePermissions(filePath)));
 
         // Setting Read only permission on the file and verifying that the file is not writable
         Assert.assertTrue(fw.exists(filePath));
         fw.setPermissions(filePath, FileSystemWrapper.READ_ONLY_PERMISSION);
+        System.out.printf("validateSetPermissions after setPermissions file=%s permission=%s %n", filePath, PosixFilePermissions.toString(Files.getPosixFilePermissions(filePath)));
         Assert.assertFalse(fw.isWritable(filePath));
     }
 
@@ -242,6 +244,7 @@ public class FileSystemWrapperTests {
         // Act. Create the file
         FileAttribute<Set<PosixFilePermission>> fileAttributes = PosixFilePermissions.asFileAttribute(FileSystemWrapper.READ_WRITE_PERMISSION);
         fw.createFile(fileAttributes, filePath);
+        System.out.printf("validateSetPermissionsAfter before setPermissions file=%s permission=%s %n", filePath, PosixFilePermissions.toString(Files.getPosixFilePermissions(filePath)));
 
         // Assert. Check that the file isWriteable
         Assert.assertTrue(fw.isWritable(filePath));
@@ -251,10 +254,14 @@ public class FileSystemWrapperTests {
 
         // Set read only permission on the file and verify that it's not writable
         fw.setPermissions(filePath, FileSystemWrapper.READ_ONLY_PERMISSION);
+        System.out.printf("validateSetPermissionsAfter after setPermissions file=%s permission=%s %n", filePath, PosixFilePermissions.toString(Files.getPosixFilePermissions(filePath)));
+
         Assert.assertFalse(fw.isWritable(filePath));
 
         // Set read-write permission on the file and verify that it's writable
         fw.setPermissions(filePath, FileSystemWrapper.READ_WRITE_PERMISSION);
+        System.out.printf("validateSetPermissionsAfter after setPermissions 2 file=%s permission=%s %n", filePath, PosixFilePermissions.toString(Files.getPosixFilePermissions(filePath)));
+
         Assert.assertTrue(fw.isWritable(filePath));
     }
 }
