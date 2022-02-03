@@ -33,6 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Set;
 
 /**
@@ -142,7 +143,13 @@ public class FileSystemWrapper {
      * @return true if file is writable, false otherwise.
      */
     boolean isWritable(Path path) {
-        return Files.isWritable(path);
+        val b =  Files.isWritable(path);
+        try {
+            System.out.printf("FileSystemWrapper::isWritable file=%s permission=%s isWritable=%s %n", path, PosixFilePermissions.toString(Files.getPosixFilePermissions(path)), b);
+        } catch (Exception e) {
+
+        }
+        return b;
     }
 
     /**
