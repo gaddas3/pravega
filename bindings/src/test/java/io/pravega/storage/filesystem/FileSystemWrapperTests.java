@@ -170,6 +170,7 @@ public class FileSystemWrapperTests {
 
     @Test
     public void validateSetPermissions() throws IOException {
+        System.out.printf("user=%s%n", System.getProperty("user.name"));
         // Arrange. Create FileSystemWrapper instance to test
         String filename4 = "temp8";
         Path filePath = tempDirPath.resolve(Path.of(filename4));
@@ -233,6 +234,7 @@ public class FileSystemWrapperTests {
 
     @Test
     public void validateSetPermissionsAfter() throws IOException {
+        System.out.printf("user=%s%n", System.getProperty("user.name"));
         // Arrange. Create FileSystemWrapper instance to test
         String filename6 = "temp10";
         Path filePath = tempDirPath.resolve(Path.of(filename6));
