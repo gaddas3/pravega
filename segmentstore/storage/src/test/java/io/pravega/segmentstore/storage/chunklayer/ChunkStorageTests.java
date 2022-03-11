@@ -17,10 +17,12 @@
 package io.pravega.segmentstore.storage.chunklayer;
 
 import io.pravega.common.Exceptions;
+import io.pravega.common.concurrent.Futures;
 import io.pravega.common.io.BoundedInputStream;
 import io.pravega.segmentstore.storage.mocks.InMemoryChunkStorage;
 import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.common.ThreadPooledTestSuite;
+import lombok.Cleanup;
 import lombok.Getter;
 import lombok.val;
 import org.junit.After;
@@ -29,9 +31,13 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -42,7 +48,7 @@ import static org.junit.Assert.assertTrue;
  * Unit tests specifically targeted at test {@link ChunkStorage} implementation.
  */
 public class ChunkStorageTests extends ThreadPooledTestSuite {
-    private static final int THREAD_POOL_SIZE = 3;
+    private static final int THREAD_POOL_SIZE = 300;
     Random rnd = new Random(0);
 
     @Getter
@@ -860,6 +866,50 @@ public class ChunkStorageTests extends ThreadPooledTestSuite {
         val used = chunkStorage.getUsedSpace().get();
         Assert.assertTrue(used >= 0);
     }
+
+
+    /**
+     * Test parallel reads.
+     */
+    @Test
+    public void testParallelReads() throws Exception {
+        val dataSize = 100;
+        String chunknameA = "A";
+        assertFalse(chunkStorage.exists(chunknameA).get());
+        @Cleanup("shutdownNow")
+        val testExecutor = Executors.newScheduledThreadPool(dataSize);
+        // Write data
+        byte[] writeBuffer = new byte[dataSize];
+        populate(writeBuffer);
+        ChunkHandle handleA = chunkStorage.createWithContent(chunknameA, writeBuffer.length, new ByteArrayInputStream(writeBuffer)).get();
+        ChunkInfo chunkInfoA = chunkStorage.getInfo(chunknameA).get();
+        assertEquals(dataSize, chunkInfoA.getLength());
+
+        // Read back
+        ArrayList<CompletableFuture<Void>> futures = new ArrayList<>();
+        for (int startOffset = 0; startOffset < dataSize / 2; startOffset++) {
+            for (int size = 1; size < dataSize / 2; size++) {
+                val fromOffset = startOffset;
+                val readBuffer = new byte[size];
+                futures.add(
+                    // Introduce random delay
+                    Futures.delayedFuture(Duration.ofMillis(rnd.nextInt() % 37), testExecutor)
+                        .thenComposeAsync( v -> chunkStorage.read(handleA, fromOffset, readBuffer.length, readBuffer, 0), testExecutor)
+                        .thenAcceptAsync( bytesRead -> {
+                           for (int i = 0; i < readBuffer.length; i++ ) {
+                               // Compare arrays
+                               Assert.assertEquals(String.format("Arrays differ for fromOffset=%d size=%d ", fromOffset, readBuffer.length),
+                                       writeBuffer[fromOffset + i],
+                                       readBuffer[i]);
+                           }
+                        }, testExecutor));
+            }
+        }
+
+        Futures.allOf(futures).join();
+    }
+
+
 
     /**
      * Test default capabilities.
