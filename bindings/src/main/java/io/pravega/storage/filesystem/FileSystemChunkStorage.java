@@ -34,7 +34,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.NoSuchFileException;
@@ -198,18 +197,20 @@ public class FileSystemChunkStorage extends BaseChunkStorage {
             throws ChunkStorageException, NullPointerException, IndexOutOfBoundsException {
         Path path = getFilePath(handle.getChunkName());
         try {
-            FileChannel channel = fileSystem.getFileChannel(path, StandardOpenOption.READ);
-            int totalBytesRead = 0;
-            long readOffset = fromOffset;
-            do {
-                ByteBuffer readBuffer = ByteBuffer.wrap(buffer, bufferOffset, length);
-                int bytesRead = channel.read(readBuffer, readOffset);
-                bufferOffset += bytesRead;
-                totalBytesRead += bytesRead;
-                length -= bytesRead;
-                readOffset += bytesRead;
-            } while (length > 0);
-            return totalBytesRead;
+            val channel = fileSystem.getFileChannel(path, StandardOpenOption.READ);
+            synchronized (channel) {
+                int totalBytesRead = 0;
+                long readOffset = fromOffset;
+                do {
+                    ByteBuffer readBuffer = ByteBuffer.wrap(buffer, bufferOffset, length);
+                    int bytesRead = channel.read(readBuffer, readOffset);
+                    bufferOffset += bytesRead;
+                    totalBytesRead += bytesRead;
+                    length -= bytesRead;
+                    readOffset += bytesRead;
+                } while (length > 0);
+                return totalBytesRead;
+            }
         } catch (IOException e) {
             throw convertException(handle.getChunkName(), "doRead", e);
         } catch (IndexOutOfBoundsException e) {
@@ -224,23 +225,25 @@ public class FileSystemChunkStorage extends BaseChunkStorage {
 
         long totalBytesWritten = 0;
         try {
-            FileChannel channel = fileSystem.getFileChannel(path, StandardOpenOption.WRITE);
-            long fileSize = channel.size();
-            if (fileSize != offset) {
-                throw new InvalidOffsetException(handle.getChunkName(), fileSize, offset, "doWrite");
-            }
+            val channel = fileSystem.getFileChannel(path, StandardOpenOption.WRITE);
+            synchronized (channel) {
+                long fileSize = channel.size();
+                if (fileSize != offset) {
+                    throw new InvalidOffsetException(handle.getChunkName(), fileSize, offset, "doWrite");
+                }
 
-            // Wrap the input data into a ReadableByteChannel, but do not close it. Doing so will result in closing
-            // the underlying InputStream, which is not desirable if it is to be reused.
-            ReadableByteChannel sourceChannel = Channels.newChannel(data);
-            while (length > 0) {
-                long bytesWritten = channel.transferFrom(sourceChannel, offset, length);
-                assert bytesWritten > 0 : "Unable to make any progress transferring data.";
-                offset += bytesWritten;
-                totalBytesWritten += bytesWritten;
-                length -= bytesWritten;
+                // Wrap the input data into a ReadableByteChannel, but do not close it. Doing so will result in closing
+                // the underlying InputStream, which is not desirable if it is to be reused.
+                ReadableByteChannel sourceChannel = Channels.newChannel(data);
+                while (length > 0) {
+                    long bytesWritten = channel.transferFrom(sourceChannel, offset, length);
+                    assert bytesWritten > 0 : "Unable to make any progress transferring data.";
+                    offset += bytesWritten;
+                    totalBytesWritten += bytesWritten;
+                    length -= bytesWritten;
+                }
+                channel.force(true);
             }
-            channel.force(true);
         } catch (IOException e) {
             throw convertException(handle.getChunkName(), "doWrite", e);
         }
@@ -255,24 +258,28 @@ public class FileSystemChunkStorage extends BaseChunkStorage {
             long offset = chunks[0].getLength();
 
             val targetChannel = fileSystem.getFileChannel(targetPath, StandardOpenOption.WRITE);
-            for (int i = 1; i < chunks.length; i++) {
-                val source = chunks[i];
-                Preconditions.checkArgument(!chunks[0].getName().equals(source.getName()), "target and source can not be same.");
-                Path sourcePath = getFilePath(source.getName());
-                long length = chunks[i].getLength();
-                Preconditions.checkState(offset <= fileSystem.getFileSize(targetPath));
-                Preconditions.checkState(length <= fileSystem.getFileSize(sourcePath));
-                val sourceChannel = fileSystem.getFileChannel(sourcePath, StandardOpenOption.READ);
-                while (length > 0) {
-                    long bytesTransferred = targetChannel.transferFrom(sourceChannel, offset, length);
-                    offset += bytesTransferred;
-                    length -= bytesTransferred;
+            synchronized (targetChannel) {
+                for (int i = 1; i < chunks.length; i++) {
+                    val source = chunks[i];
+                    Preconditions.checkArgument(!chunks[0].getName().equals(source.getName()), "target and source can not be same.");
+                    Path sourcePath = getFilePath(source.getName());
+                    long length = chunks[i].getLength();
+                    Preconditions.checkState(offset <= fileSystem.getFileSize(targetPath));
+                    Preconditions.checkState(length <= fileSystem.getFileSize(sourcePath));
+                    val sourceChannel = fileSystem.getFileChannel(sourcePath, StandardOpenOption.READ);
+                    synchronized (sourceChannel) {
+                        while (length > 0) {
+                            long bytesTransferred = targetChannel.transferFrom(sourceChannel, offset, length);
+                            offset += bytesTransferred;
+                            length -= bytesTransferred;
+                        }
+                    }
+                    targetChannel.force(true);
+                    totalBytesConcated += length;
+                    offset += length;
                 }
-                targetChannel.force(true);
-                totalBytesConcated += length;
-                offset += length;
+                return totalBytesConcated;
             }
-            return totalBytesConcated;
         } catch (IOException e) {
             throw convertException(chunks[0].getName(), "doConcat", e);
         }
