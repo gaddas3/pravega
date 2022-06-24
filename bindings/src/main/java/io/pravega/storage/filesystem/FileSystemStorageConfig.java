@@ -30,7 +30,6 @@ import java.time.Duration;
 public class FileSystemStorageConfig {
     //region Config Names
     public static final Property<Integer> WRITE_CHANNEL_CACHE_SIZE = Property.named("write.channel.cache.size", 1024);
-    public static final Property<Integer> READ_CHANNEL_CACHE_SIZE = Property.named("read.channel.cache.size", 1024);
     public static final Property<String> ROOT = Property.named("root", "/fs/");
     public static final Property<Boolean> REPLACE_ENABLED = Property.named("replace.enable", false);
     public static final String COMPONENT_CODE = "filesystem";
@@ -54,13 +53,6 @@ public class FileSystemStorageConfig {
      */
     @Getter
     private final boolean replaceEnabled;
-
-    /**
-     * Size of FileChannel Read Cache.
-     */
-    @Getter
-    private final int readChannelCacheSize;
-
     /**
      * Size of FileChannel Write Cache.
      */
@@ -91,7 +83,6 @@ public class FileSystemStorageConfig {
     private FileSystemStorageConfig(TypedProperties properties) throws ConfigurationException {
         this.root = properties.get(ROOT);
         this.replaceEnabled = properties.getBoolean(REPLACE_ENABLED);
-        this.readChannelCacheSize = properties.getPositiveInt(READ_CHANNEL_CACHE_SIZE);
         this.writeChannelCacheSize = properties.getPositiveInt(WRITE_CHANNEL_CACHE_SIZE);
         this.readChannelCacheExpiration = Duration.ofSeconds(properties.getPositiveInt(READ_CACHE_EXPIRATION));
         this.writeChannelCacheExpiration = Duration.ofSeconds(properties.getPositiveInt(WRITE_CACHE_EXPIRATION));

@@ -76,7 +76,7 @@ public class FileSystemChunkStorage extends BaseChunkStorage {
     public FileSystemChunkStorage(FileSystemStorageConfig config, Executor executor) {
         super(executor);
         this.config = Preconditions.checkNotNull(config, "config");
-        this.fileSystem = new FileSystemWrapper(config.getReadChannelCacheSize(), config.getWriteChannelCacheSize(), config.getReadChannelCacheExpiration(), config.getWriteChannelCacheExpiration());
+        this.fileSystem = new FileSystemWrapper(config.getWriteChannelCacheSize(), config.getWriteChannelCacheExpiration());
     }
 
     /**
@@ -225,22 +225,24 @@ public class FileSystemChunkStorage extends BaseChunkStorage {
         long totalBytesWritten = 0;
         try {
             FileChannel channel = fileSystem.getFileChannel(path, StandardOpenOption.WRITE);
-            long fileSize = channel.size();
-            if (fileSize != offset) {
-                throw new InvalidOffsetException(handle.getChunkName(), fileSize, offset, "doWrite");
-            }
+            synchronized (channel) {
+                long fileSize = channel.size();
+                if (fileSize != offset) {
+                    throw new InvalidOffsetException(handle.getChunkName(), fileSize, offset, "doWrite");
+                }
 
-            // Wrap the input data into a ReadableByteChannel, but do not close it. Doing so will result in closing
-            // the underlying InputStream, which is not desirable if it is to be reused.
-            ReadableByteChannel sourceChannel = Channels.newChannel(data);
-            while (length > 0) {
-                long bytesWritten = channel.transferFrom(sourceChannel, offset, length);
-                assert bytesWritten > 0 : "Unable to make any progress transferring data.";
-                offset += bytesWritten;
-                totalBytesWritten += bytesWritten;
-                length -= bytesWritten;
+                // Wrap the input data into a ReadableByteChannel, but do not close it. Doing so will result in closing
+                // the underlying InputStream, which is not desirable if it is to be reused.
+                ReadableByteChannel sourceChannel = Channels.newChannel(data);
+                while (length > 0) {
+                    long bytesWritten = channel.transferFrom(sourceChannel, offset, length);
+                    assert bytesWritten > 0 : "Unable to make any progress transferring data.";
+                    offset += bytesWritten;
+                    totalBytesWritten += bytesWritten;
+                    length -= bytesWritten;
+                }
+                channel.force(true);
             }
-            channel.force(true);
         } catch (IOException e) {
             throw convertException(handle.getChunkName(), "doWrite", e);
         }

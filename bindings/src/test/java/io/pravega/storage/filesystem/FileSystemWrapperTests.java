@@ -59,14 +59,13 @@ public class FileSystemWrapperTests {
     private void testCachedPopulated(StandardOpenOption option, String fileName, boolean isWrite) throws IOException {
         // Arrange. Create FileSystemWrapper instance to test
         Path filePath = tempDirPath.resolve(Path.of(fileName));
-        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_SIZE, CACHE_EXP, CACHE_EXP);
+        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_EXP);
 
         // Check that file doesn't exist
         Assert.assertFalse(fw.exists(filePath));
 
         // Check that key doesn't exist in cache
         Assert.assertNull(fw.getWriteCache().getIfPresent(filePath.toString()));
-        Assert.assertNull(fw.getReadCache().getIfPresent(filePath.toString()));
 
         // Act. Create file
         FileAttribute<Set<PosixFilePermission>> fileAttributes = PosixFilePermissions.asFileAttribute(FileSystemWrapper.READ_WRITE_PERMISSION);
@@ -84,19 +83,12 @@ public class FileSystemWrapperTests {
         FileChannel fileChannelFromCache;
         if (isWrite) {
             fileChannelFromCache = fw.getWriteCache().getIfPresent(filePath.toString());
-        } else {
-            fileChannelFromCache = fw.getReadCache().getIfPresent(filePath.toString());
-        }
-        Assert.assertNotNull(fileChannelFromCache);
-
-        if (isWrite) {
-            Assert.assertNull(fw.getReadCache().getIfPresent(filePath.toString()));
-        } else {
+            Assert.assertNotNull(fileChannelFromCache);
+            // Check that we get the same instance that is put in the cache
+            Assert.assertEquals(fileChannel, fileChannelFromCache);
+        }  else {
             Assert.assertNull(fw.getWriteCache().getIfPresent(filePath.toString()));
         }
-
-        // Check that we get the same instance that is put in the cache
-        Assert.assertEquals(fileChannel, fileChannelFromCache);
     }
 
     @Test
@@ -104,7 +96,7 @@ public class FileSystemWrapperTests {
         // Arrange. Create FileSystemWrapper instance to test
         String fileName1 = "temp5";
         Path filePath = tempDirPath.resolve(Path.of(fileName1));
-        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_SIZE, CACHE_EXP, CACHE_EXP);
+        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_EXP);
 
         // Check that the file doesn't exist
         Assert.assertFalse(fw.exists(filePath));
@@ -132,7 +124,7 @@ public class FileSystemWrapperTests {
         // Arrange. Create FileSystemWrapper instance to test
         String fileName2 = "temp6";
         Path filePath = tempDirPath.resolve(Path.of(fileName2));
-        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_SIZE, CACHE_EXP, CACHE_EXP);
+        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_EXP);
 
         // Check that file doesn't exist
         boolean b = fw.exists(filePath);
@@ -156,7 +148,7 @@ public class FileSystemWrapperTests {
         // Arrange. Create FileSystemWrapper instance to test
         String fileName3 = "temp7";
         Path filePath = tempDirPath.resolve(Path.of(fileName3));
-        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_SIZE, CACHE_EXP, CACHE_EXP);
+        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_EXP);
 
         // Check that file doesn't exist
         Assert.assertFalse(fw.exists(filePath));
@@ -181,7 +173,7 @@ public class FileSystemWrapperTests {
         // Arrange. Create FileSystemWrapper instance to test
         String filename4 = "temp8";
         Path filePath = tempDirPath.resolve(Path.of(filename4));
-        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_SIZE, CACHE_EXP, CACHE_EXP);
+        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_EXP);
 
         // Check that file doesn't exist
         Assert.assertFalse(fw.exists(filePath));
@@ -201,7 +193,7 @@ public class FileSystemWrapperTests {
         // Arrange. Create FileSystemWrapper instance to test
         String filename5 = "temp9";
         Path filePath = tempDirPath.resolve(Path.of(filename5));
-        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_SIZE, CACHE_EXP, CACHE_EXP);
+        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_EXP);
 
         // Check that file doesn't exist
         Assert.assertFalse(fw.exists(filePath));
@@ -222,7 +214,7 @@ public class FileSystemWrapperTests {
         // Arrange. Create FileSystemWrapper instance to test
         String dirName = "tempDir1";
         Path dirPath = tempDirPath.resolve(Path.of(dirName));
-        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_SIZE, CACHE_EXP, CACHE_EXP);
+        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_EXP);
 
         // Check that directory doesn't exist
         Assert.assertFalse(fw.exists(dirPath));
@@ -245,7 +237,7 @@ public class FileSystemWrapperTests {
         // Arrange. Create FileSystemWrapper instance to test
         String filename6 = "temp10";
         Path filePath = tempDirPath.resolve(Path.of(filename6));
-        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_SIZE, CACHE_EXP, CACHE_EXP);
+        FileSystemWrapper fw = new FileSystemWrapper(CACHE_SIZE, CACHE_EXP);
 
         // Check that file doesn't exist
         Assert.assertFalse(fw.exists(filePath));

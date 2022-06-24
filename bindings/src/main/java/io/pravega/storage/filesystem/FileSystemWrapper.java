@@ -59,23 +59,15 @@ public class FileSystemWrapper {
             PosixFilePermission.OTHERS_READ);
 
     @Getter
-    private final Cache<String, FileChannel> readCache;
-    @Getter
     private final Cache<String, FileChannel> writeCache;
 
     /**
      * Constructs new instance of FileSystemWrapper.
-     * @param readCacheSize Read cache size
-     * @param writeCacheSize Write cache size
-     * @param readCacheExpirationDuration Read Cache Expiration Duration
+     *
+     * @param writeCacheSize               Write cache size
      * @param writeCacheExpirationDuration Write Cache Expiration Duration
      */
-    public FileSystemWrapper(int readCacheSize, int writeCacheSize, Duration readCacheExpirationDuration, Duration writeCacheExpirationDuration) {
-        readCache = CacheBuilder.newBuilder()
-                .maximumSize(readCacheSize)
-                .expireAfterAccess(readCacheExpirationDuration)
-                .removalListener(this::handleRemovalNotification)
-                .build();
+    public FileSystemWrapper(int writeCacheSize, Duration writeCacheExpirationDuration) {
         writeCache = CacheBuilder.newBuilder()
                 .maximumSize(writeCacheSize)
                 .expireAfterAccess(writeCacheExpirationDuration)
@@ -104,7 +96,6 @@ public class FileSystemWrapper {
      */
 
     Path createFile(FileAttribute<Set<PosixFilePermission>> fileAttributes, Path path) throws IOException {
-        readCache.invalidate(path.toString());
         writeCache.invalidate(path.toString());
         return Files.createFile(path, fileAttributes);
     }
@@ -125,7 +116,6 @@ public class FileSystemWrapper {
      * @throws IOException Exception thrown by file system call.
      */
     void delete(Path path) throws IOException {
-        readCache.invalidate(path.toString());
         writeCache.invalidate(path.toString());
         Files.delete(path);
     }
@@ -170,12 +160,7 @@ public class FileSystemWrapper {
         FileChannel channel = null;
         val fullPath = path.toString();
         if (openOption.equals(StandardOpenOption.READ)) {
-            channel = readCache.getIfPresent(fullPath);
-            if (null == channel) {
-                channel = FileChannel.open(path, openOption);
-                log.info("FileSystemWrapper: opening file for read {}", fullPath);
-                readCache.put(fullPath, channel);
-            }
+            channel = FileChannel.open(path, openOption);
         }
         if (openOption.equals(StandardOpenOption.WRITE) || openOption.equals(StandardOpenOption.CREATE) || openOption.equals(StandardOpenOption.CREATE_NEW)) {
             channel = writeCache.getIfPresent(fullPath);
