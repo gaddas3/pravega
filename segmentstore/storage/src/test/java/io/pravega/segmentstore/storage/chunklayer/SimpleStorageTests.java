@@ -32,22 +32,26 @@ import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 
 import static io.pravega.test.common.AssertExtensions.assertMayThrow;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Scenario tests using ChunkedSegmentStorage, ChunkStorage and ChunkMetadataStore together.
  *
  * The derived classes are expected to override getChunkStorage to return instance of specific type derived from ChunkStorage.
- * In addition the method populate can be overriden to handle implementation specific logic. (Eg. NoOpChunkStorage)
+ * In addition, the method populate can be overridden to handle implementation specific logic. (Eg. NoOpChunkStorage)
  */
 @Slf4j
 public abstract class SimpleStorageTests extends StorageTestBase {
     private static final int CONTAINER_ID = 42;
     private static final int WRITE_COUNT = 5;
+    private static final int DATA_SIZE = 5;
     private static final int THREAD_POOL_SIZE = 3;
+    private static final boolean SHOULD_RUN_LONG_RUNNING_TESTS = true;
 
     ChunkStorage chunkStorage;
     ChunkMetadataStore chunkMetadataStore;
@@ -55,6 +59,10 @@ public abstract class SimpleStorageTests extends StorageTestBase {
     @Override
     protected int getThreadPoolSize() {
         return THREAD_POOL_SIZE;
+    }
+
+    protected boolean shouldRunLongRunningTests() {
+        return SHOULD_RUN_LONG_RUNNING_TESTS;
     }
 
     /**
@@ -463,4 +471,230 @@ public abstract class SimpleStorageTests extends StorageTestBase {
     }
     //endregion
 
+    @Test
+    public void testReadForVariousOffsetsAndSizes() throws Exception {
+        if (!shouldRunLongRunningTests()) {
+            return;
+        }
+
+        byte[] writeBuffer = new byte[DATA_SIZE];
+        populate(writeBuffer);
+
+        String segmentName = createSegmentName("testSimpleReadWrite");
+        populateWithSingleWrite(DEFAULT_EPOCH, segmentName, writeBuffer);
+        checkDataWithSimpleRead(DEFAULT_EPOCH + 1, segmentName, writeBuffer);
+        checkDataWithReadForVariousOffsetsAndSizes(DEFAULT_EPOCH + 1, segmentName, writeBuffer);
+
+        deleteSegment(segmentName);
+    }
+
+
+    @Test
+    public void testMultipleRestarts() throws Exception {
+        if (!shouldRunLongRunningTests()) {
+            return;
+        }
+
+        for (int i = 0; i < DATA_SIZE; i++) {
+            for (int j = 0; i + j < DATA_SIZE; j++) {
+                // populate data
+                byte[] dataToWrite = new byte[DATA_SIZE];
+                populate(dataToWrite);
+                // Write the segment.
+                String segmentName = createSegmentName("testMultipleWrites" + i + "_" + j);
+                populateSegmentWithMultipleWritesAcrossEpochs(DEFAULT_EPOCH, segmentName, dataToWrite, new int[] {i, j, dataToWrite.length - i - j});
+
+                // Check data.
+                checkDataWithSimpleRead(DEFAULT_EPOCH + 4, segmentName, dataToWrite);
+
+                // check read exhaustively
+                checkDataWithReadForVariousOffsetsAndSizes(DEFAULT_EPOCH + 4, segmentName, dataToWrite);
+
+                // Delete the segment
+                deleteSegment(segmentName);
+            }
+        }
+    }
+
+    @Test
+    public void testMultipleWrites() throws Exception {
+        if (!shouldRunLongRunningTests()) {
+            return;
+        }
+
+        for (int i = 0; i < DATA_SIZE; i++) {
+            for (int j = 0; i + j < DATA_SIZE; j++) {
+                String segmentName = createSegmentName("testMultipleWrites" + i + "_" + j);
+                byte[] dataToWrite = new byte[DATA_SIZE];
+                populate(dataToWrite);
+                // populate the segment with multiple writes
+                populateSegmentWithMultipleWritesInSameEpoch(DEFAULT_EPOCH, segmentName, dataToWrite, new int[] {i, j, dataToWrite.length - i - j});
+
+                // check data
+                checkDataWithSimpleRead(DEFAULT_EPOCH + 4, segmentName, dataToWrite);
+
+                // check read exhaustively
+                checkDataWithReadForVariousOffsetsAndSizes(DEFAULT_EPOCH + 4, segmentName, dataToWrite);
+
+                // delete the segment
+                deleteSegment(segmentName);
+            }
+        }
+    }
+
+    //region synchronization unit tests
+
+    //endregion
+
+    //region
+
+    /**
+     * Populates the segment with given data using single write operation.
+     *
+     * @param epoch Epoch for storage instance.
+     * @param segmentName Name of the segment.
+     * @param dataToWrite Data to write to the segment.
+     * @throws Exception
+     */
+    private void populateWithSingleWrite(long epoch, String segmentName, byte[] dataToWrite) throws Exception {
+        try (Storage s = createStorage()) {
+            s.initialize(epoch);
+            createSegment(segmentName, s);
+            Assert.assertTrue("Expected the segment to exist.", s.exists(segmentName, null).join());
+
+            SegmentHandle writeHandle = s.openWrite(segmentName).join();
+            Assert.assertEquals(segmentName, writeHandle.getSegmentName());
+            Assert.assertEquals(false, writeHandle.isReadOnly());
+            s.write(writeHandle, 0, new ByteArrayInputStream(dataToWrite), dataToWrite.length, null).join();
+        }
+    }
+
+    /**
+     * Populates the segment with given data using multiple write operations.
+     *
+     * @param epoch        Epoch for storage instance.
+     * @param segmentName  Name of the segment.
+     * @param dataToWrite  Data to write to the segment.
+     * @param writeLengths Length of writes.
+     * @throws Exception
+     */
+    private void populateSegmentWithMultipleWritesInSameEpoch(long epoch, String segmentName, byte[] dataToWrite, int[] writeLengths) throws Exception {
+        try (Storage s = createStorage()) {
+            s.initialize(epoch);
+            createSegment(segmentName, s);
+            Assert.assertTrue("Expected the segment to exist.", s.exists(segmentName, null).join());
+
+            SegmentHandle writeHandle = s.openWrite(segmentName).join();
+            Assert.assertEquals(segmentName, writeHandle.getSegmentName());
+            Assert.assertFalse(writeHandle.isReadOnly());
+
+            int totalBytesWritten = 0;
+
+            for (int length : writeLengths) {
+                s.write(writeHandle, totalBytesWritten, new ByteArrayInputStream(dataToWrite, totalBytesWritten, length), length, null).join();
+                totalBytesWritten += length;
+            }
+            Assert.assertEquals(dataToWrite.length, totalBytesWritten);
+        }
+    }
+
+    /**
+     * Populates the segment with given data using multiple write operations spread across multiple instances.
+     *
+     * @param startEpoch   starting epoch for storage instance.
+     * @param segmentName  Name of the segment.
+     * @param dataToWrite  Data to write to the segment.
+     * @param writeLengths Length of individual writes.
+     * @throws Exception
+     */
+    private void populateSegmentWithMultipleWritesAcrossEpochs(long startEpoch, String segmentName, byte[] dataToWrite, int[] writeLengths) throws Exception {
+        long epoch = startEpoch;
+        try (Storage s = createStorage()) {
+            s.initialize(epoch);
+            createSegment(segmentName, s);
+            Assert.assertTrue("Expected the segment to exist.", s.exists(segmentName, null).join());
+
+            SegmentHandle writeHandle = s.openWrite(segmentName).join();
+            Assert.assertEquals(segmentName, writeHandle.getSegmentName());
+            Assert.assertFalse(writeHandle.isReadOnly());
+        }
+
+        int totalBytesWritten = 0;
+
+        for (int length : writeLengths) {
+            try (Storage s = createStorage()) {
+                s.initialize(++epoch);
+                SegmentHandle writeHandle = s.openWrite(segmentName).join();
+                s.write(writeHandle, totalBytesWritten, new ByteArrayInputStream(dataToWrite, totalBytesWritten, length), length, null).join();
+                totalBytesWritten += length;
+            }
+        }
+
+        Assert.assertEquals(dataToWrite.length, totalBytesWritten);
+    }
+
+    /**
+     * Exhaustively checks the reading of segment contents by reading data back in multiple ways.
+     * More specifically it reads subsets of data of various sizes from various offsets in segment.
+     *
+     * @param readEpoch Epoch to use for read instance.
+     * @param segmentName Name of the segment.
+     * @param expectedData Expected contents of the segment.
+     * @throws Exception
+     */
+    private void checkDataWithReadForVariousOffsetsAndSizes(long readEpoch, String segmentName, byte[] expectedData) throws Exception {
+        try (Storage s = createStorage()) {
+            s.initialize(readEpoch);
+            SegmentHandle readHandle = s.openRead(segmentName).join();
+            Assert.assertEquals(segmentName, readHandle.getSegmentName());
+            Assert.assertEquals(true, readHandle.isReadOnly());
+            // Exhaustively test all combinations of offset, bufferOffest and sizes.
+            for (int bufferStart = 0; bufferStart <= 2 * expectedData.length; bufferStart++) {
+                for (int fromOffset = 0; fromOffset < expectedData.length; fromOffset++) {
+                    for (int size = 1; size < expectedData.length - fromOffset; size++) {
+                        byte[] readBuffer = new byte[3 * expectedData.length];
+                        int bytesRead = s.read(readHandle, fromOffset, readBuffer, bufferStart, size, null).get();
+                        assertEquals(size, bytesRead);
+                        assertEquals(0, Arrays.compare(expectedData, fromOffset, fromOffset + size - 1, readBuffer, bufferStart, bufferStart + size - 1));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Checks that segment contains given data using single read that reads entire segment.
+     *
+     * @param readEpoch Epoch to use for read instance.
+     * @param segmentName Name of the segment.
+     * @param expectedData Expected contents of the segment.
+     * @throws Exception
+     */
+    private void checkDataWithSimpleRead(long readEpoch, String segmentName, byte[] expectedData) throws Exception {
+        try (Storage s = createStorage()) {
+            s.initialize(readEpoch);
+            SegmentHandle readHandle = s.openRead(segmentName).join();
+            Assert.assertEquals(segmentName, readHandle.getSegmentName());
+            Assert.assertTrue(readHandle.isReadOnly());
+            byte[] readBuffer = new byte[expectedData.length];
+            int bytesRead = s.read(readHandle, 0, readBuffer, 0, expectedData.length, null).get();
+            Assert.assertEquals(expectedData.length, bytesRead);
+            Assert.assertArrayEquals(expectedData, readBuffer);
+        }
+    }
+
+    /**
+     * Delete given segment.
+     *
+     * @param segmentName Name of the segment top delete.
+     * @throws Exception
+     */
+    private void deleteSegment(String segmentName) throws Exception {
+        try (Storage s = createStorage()) {
+            s.initialize(DEFAULT_EPOCH + DATA_SIZE);
+            SegmentHandle writeHandle = s.openWrite(segmentName).join();
+            s.delete(writeHandle, null).get();
+        }
+    }
+    //endregion
 }

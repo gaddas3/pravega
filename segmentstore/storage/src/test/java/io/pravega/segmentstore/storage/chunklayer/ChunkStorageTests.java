@@ -29,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -169,6 +170,85 @@ public class ChunkStorageTests extends ThreadPooledTestSuite {
         // Delete.
         chunkStorage.delete(chunkHandle).join();
     }
+
+    /**
+     */
+    @Test
+    public void testReadsWithAllOffsetSizeCombinations() throws Exception {
+        String chunkName = "testchunk";
+
+        // Create.
+        byte[] writeBuffer = new byte[5];
+        populate(writeBuffer);
+        ChunkHandle chunkHandle = chunkStorage.createWithContent(chunkName, writeBuffer.length, new ByteArrayInputStream(writeBuffer)).get();
+        assertEquals(chunkName, chunkHandle.getChunkName());
+        assertEquals(false, chunkHandle.isReadOnly());
+
+        // Read back.
+        // allocate read buffer 3 times size of data written.
+        // Exhaustively test all combinations of bufferStart and fromOffset.
+        for (int bufferStart = 0; bufferStart <= 2 * writeBuffer.length; bufferStart++) {
+            for (int fromOffset = 0; fromOffset < writeBuffer.length; fromOffset++) {
+                for (int size = 1; size < writeBuffer.length - fromOffset; size++) {
+                    byte[] readBuffer = new byte[3 * writeBuffer.length];
+                    int bytesRead = chunkStorage.read(chunkHandle, fromOffset, size, readBuffer, bufferStart).get();
+                    assertEquals(size, bytesRead);
+                    assertEquals(0, Arrays.compare(writeBuffer, fromOffset, fromOffset + size - 1, readBuffer, bufferStart, bufferStart + size - 1));
+                }
+            }
+        }
+
+        // Delete.
+        chunkStorage.delete(chunkHandle).join();
+    }
+
+    /**
+     */
+    @Test
+    public void testReadsWithAllOffsetSizeCombinationsAfterMultipleWrites() throws Exception {
+        if (!chunkStorage.supportsAppend()) {
+            return;
+        }
+        String chunkName = "testchunk";
+
+        // Create.
+        ChunkHandle chunkHandle = chunkStorage.create(chunkName).get();
+        assertEquals(chunkName, chunkHandle.getChunkName());
+        assertEquals(false, chunkHandle.isReadOnly());
+
+        // Write multiple times.
+        byte[] writeBuffer = new byte[10];
+        populate(writeBuffer);
+        int totalBytesWritten = 0;
+        for (int i = 1; i <= 4; i++) {
+            int bytesWritten = chunkStorage.write(chunkHandle, totalBytesWritten, i, new ByteArrayInputStream(writeBuffer, totalBytesWritten, i)).get();
+            assertEquals(i, bytesWritten);
+            totalBytesWritten += i;
+        }
+
+        // Read back.
+        // allocate read buffer 3 times size of data written.
+        // Exhaustively test all combinations of bufferStart and fromOffset.
+        for (int bufferStart = 0; bufferStart <= 2 * writeBuffer.length; bufferStart++) {
+            for (int fromOffset = 0; fromOffset < writeBuffer.length; fromOffset++) {
+                for (int size = 1; size < writeBuffer.length - fromOffset; size++) {
+                    byte[] readBuffer = new byte[3 * writeBuffer.length];
+                    int totalBytesRead = 0;
+                    int remaining = size;
+                    while (remaining > 0) {
+                        int bytesRead = chunkStorage.read(chunkHandle, fromOffset + totalBytesRead, remaining, readBuffer, bufferStart + totalBytesRead).get();
+                        remaining -= bytesRead;
+                        totalBytesRead += bytesRead;
+                    }
+                    assertEquals(0, Arrays.compare(writeBuffer, fromOffset, fromOffset + size - 1, readBuffer, bufferStart, bufferStart + size - 1));
+                }
+            }
+        }
+
+        // Delete.
+        chunkStorage.delete(chunkHandle).join();
+    }
+
 
     @Test
     public void testSimpleReadWriteCreateWithContent() throws Exception {
