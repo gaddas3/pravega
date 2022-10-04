@@ -24,7 +24,6 @@ import io.pravega.segmentstore.storage.StorageFactoryCreator;
 import io.pravega.segmentstore.storage.StorageLayoutType;
 import io.pravega.segmentstore.storage.mocks.SlowStorageFactory;
 import io.pravega.segmentstore.storage.noop.StorageExtraConfig;
-import io.pravega.segmentstore.storage.noop.NoOpStorageFactory;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 

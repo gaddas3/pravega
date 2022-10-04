@@ -33,7 +33,7 @@ import io.pravega.segmentstore.storage.DurableDataLog;
 import io.pravega.segmentstore.storage.DurableDataLogException;
 import io.pravega.segmentstore.storage.Storage;
 import io.pravega.segmentstore.storage.cache.NoOpCache;
-import io.pravega.segmentstore.storage.mocks.InMemoryStorageFactory;
+
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.List;

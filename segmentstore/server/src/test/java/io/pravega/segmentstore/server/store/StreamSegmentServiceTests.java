@@ -16,7 +16,7 @@
 package io.pravega.segmentstore.server.store;
 
 import io.pravega.segmentstore.storage.mocks.InMemoryDurableDataLogFactory;
-import io.pravega.segmentstore.storage.mocks.InMemoryStorageFactory;
+
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.After;
 import org.junit.Before;

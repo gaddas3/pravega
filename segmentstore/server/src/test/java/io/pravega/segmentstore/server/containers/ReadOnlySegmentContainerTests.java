@@ -26,7 +26,6 @@ import io.pravega.segmentstore.contracts.StreamSegmentNotExistsException;
 import io.pravega.segmentstore.server.SegmentContainer;
 import io.pravega.segmentstore.server.reading.StreamSegmentStorageReaderTests;
 import io.pravega.segmentstore.storage.Storage;
-import io.pravega.segmentstore.storage.mocks.InMemoryStorageFactory;
 import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.common.ThreadPooledTestSuite;
 import java.io.ByteArrayInputStream;
