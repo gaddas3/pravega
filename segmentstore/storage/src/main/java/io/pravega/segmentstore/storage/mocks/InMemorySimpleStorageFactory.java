@@ -79,4 +79,13 @@ public class InMemorySimpleStorageFactory implements SimpleStorageFactory {
         chunkedSegmentStorage.initialize(1);
         return chunkedSegmentStorage;
     }
+    public static Storage newStorage(int containerId, ScheduledExecutorService executor) {
+        ChunkedSegmentStorage chunkedSegmentStorage = new ChunkedSegmentStorage(containerId,
+                new InMemoryChunkStorage(executor),
+                new InMemoryMetadataStore(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executor),
+                executor,
+                ChunkedSegmentStorageConfig.DEFAULT_CONFIG);
+        chunkedSegmentStorage.initialize(1);
+        return chunkedSegmentStorage;
+    }
 }

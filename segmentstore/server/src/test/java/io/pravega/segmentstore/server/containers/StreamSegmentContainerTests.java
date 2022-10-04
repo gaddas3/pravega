@@ -101,10 +101,15 @@ import io.pravega.segmentstore.storage.Storage;
 import io.pravega.segmentstore.storage.StorageFactory;
 import io.pravega.segmentstore.storage.cache.CacheStorage;
 import io.pravega.segmentstore.storage.cache.DirectMemoryCache;
+import io.pravega.segmentstore.storage.chunklayer.ChunkStorage;
+import io.pravega.segmentstore.storage.chunklayer.ChunkedSegmentStorage;
+import io.pravega.segmentstore.storage.chunklayer.ChunkedSegmentStorageConfig;
 import io.pravega.segmentstore.storage.chunklayer.SnapshotInfo;
 import io.pravega.segmentstore.storage.chunklayer.SystemJournal;
+import io.pravega.segmentstore.storage.metadata.ChunkMetadataStore;
+import io.pravega.segmentstore.storage.mocks.InMemoryChunkStorage;
 import io.pravega.segmentstore.storage.mocks.InMemoryDurableDataLogFactory;
-import io.pravega.segmentstore.storage.rolling.RollingStorage;
+import io.pravega.segmentstore.storage.mocks.InMemorySimpleStorageFactory;
 import io.pravega.shared.NameUtils;
 import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.common.IntentionalException;
@@ -130,7 +135,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -205,7 +209,6 @@ public class StreamSegmentContainerTests extends ThreadPooledTestSuite {
             .builder()
             .with(ContainerConfig.SEGMENT_METADATA_EXPIRATION_SECONDS, 10 * 60)
             .with(ContainerConfig.STORAGE_SNAPSHOT_TIMEOUT_SECONDS, 60)
-            .with(ContainerConfig.DATA_INTEGRITY_CHECKS_ENABLED, true)
             .build();
 
     // Create checkpoints every 100 operations or after 10MB have been written, but under no circumstance less frequently than 10 ops.
@@ -3097,7 +3100,7 @@ public class StreamSegmentContainerTests extends ThreadPooledTestSuite {
                     this.readIndexFactory, this.attributeIndexFactory, this.writerFactory, this.storageFactory,
                     createExtensions(createAdditionalExtensions), executorService());
             this.container = this.containerFactory.createStreamSegmentContainer(CONTAINER_ID);
-            this.storage = this.storageFactory.createStorageAdapter();
+            this.storage = this.storageFactory.containerIdToStorageMap.get(CONTAINER_ID);
         }
 
         SegmentContainerFactory.CreateExtensions getDefaultExtensions() {
@@ -3125,7 +3128,7 @@ public class StreamSegmentContainerTests extends ThreadPooledTestSuite {
             this.container.close();
             this.dataLogFactory.close();
             this.storage.close();
-            this.storageFactory.close();
+            //this.storageFactory.close();
             this.cacheManager.close();
             this.cacheStorage.close();
         }
@@ -3291,7 +3294,9 @@ public class StreamSegmentContainerTests extends ThreadPooledTestSuite {
         }
     }
 
-    private static class WatchableInMemoryStorageFactory extends InMemoryStorageFactory {
+    private static class WatchableInMemoryStorageFactory extends InMemorySimpleStorageFactory {
+        private InMemoryChunkStorage chunkStorage = new InMemoryChunkStorage(executor);
+        private Map<Integer, ChunkedSegmentStorage> containerIdToStorageMap = Collections.synchronizedMap(new HashMap<>());
         private final ConcurrentHashMap<String, Long> truncationOffsets = new ConcurrentHashMap<>();
         // Allow tests to run a custom callback after write() method is invoked in Storage.
         @Getter
@@ -3299,17 +3304,25 @@ public class StreamSegmentContainerTests extends ThreadPooledTestSuite {
 
 
         public WatchableInMemoryStorageFactory(ScheduledExecutorService executor) {
-            super(executor);
+            super(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executor, false);
         }
 
         @Override
-        public Storage createStorageAdapter() {
-            return new WatchableAsyncStorageWrapper(new RollingStorage(this.baseStorage), this.executor);
+        public Storage createStorageAdapter(int containerId, ChunkMetadataStore metadataStore) {
+            val chunkedSegmentStorage = new WatchableChunkedSegmentStorage(containerId,
+                    chunkStorage,
+                    metadataStore,
+                    executor,
+                    ChunkedSegmentStorageConfig.DEFAULT_CONFIG);
+            chunkedSegmentStorage.initialize(1);
+            containerIdToStorageMap.put(containerId, chunkedSegmentStorage);
+            return chunkedSegmentStorage;
         }
 
-        private class WatchableAsyncStorageWrapper extends AsyncStorageWrapper {
-            public WatchableAsyncStorageWrapper(SyncStorage syncStorage, Executor executor) {
-                super(syncStorage, executor);
+
+        private class WatchableChunkedSegmentStorage extends ChunkedSegmentStorage {
+            public WatchableChunkedSegmentStorage(int containerId, ChunkStorage chunkStorage, ChunkMetadataStore metadataStore, ScheduledExecutorService executor, ChunkedSegmentStorageConfig config) {
+                super(containerId, chunkStorage, metadataStore, executor, config);
             }
 
             @Override

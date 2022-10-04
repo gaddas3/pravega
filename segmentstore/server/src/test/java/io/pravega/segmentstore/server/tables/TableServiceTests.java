@@ -137,7 +137,6 @@ public class TableServiceTests extends ThreadPooledTestSuite {
         }
 
         if (this.storageFactory != null) {
-            this.storageFactory.close();
             this.storageFactory = null;
         }
     }

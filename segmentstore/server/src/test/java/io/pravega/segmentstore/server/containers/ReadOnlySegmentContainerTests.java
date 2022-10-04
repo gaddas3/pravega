@@ -26,6 +26,8 @@ import io.pravega.segmentstore.contracts.StreamSegmentNotExistsException;
 import io.pravega.segmentstore.server.SegmentContainer;
 import io.pravega.segmentstore.server.reading.StreamSegmentStorageReaderTests;
 import io.pravega.segmentstore.storage.Storage;
+import io.pravega.segmentstore.storage.chunklayer.ChunkedSegmentStorageConfig;
+import io.pravega.segmentstore.storage.mocks.InMemorySimpleStorageFactory;
 import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.common.ThreadPooledTestSuite;
 import java.io.ByteArrayInputStream;
@@ -158,10 +160,10 @@ public class ReadOnlySegmentContainerTests extends ThreadPooledTestSuite {
     private class TestContext implements AutoCloseable {
         final SegmentContainer container;
         final Storage storage;
-        private final InMemoryStorageFactory storageFactory;
+        private final InMemorySimpleStorageFactory storageFactory;
 
         TestContext() {
-            this.storageFactory = new InMemoryStorageFactory(executorService());
+            this.storageFactory = new InMemorySimpleStorageFactory(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executorService(), false);
             this.container = new ReadOnlySegmentContainer(this.storageFactory, executorService());
             this.storage = this.storageFactory.createStorageAdapter();
         }
@@ -170,7 +172,6 @@ public class ReadOnlySegmentContainerTests extends ThreadPooledTestSuite {
         public void close() {
             this.container.close();
             this.storage.close();
-            this.storageFactory.close();
         }
     }
 }

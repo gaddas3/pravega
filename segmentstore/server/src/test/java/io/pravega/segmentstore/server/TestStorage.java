@@ -21,6 +21,11 @@ import io.pravega.segmentstore.contracts.StreamSegmentNotExistsException;
 import io.pravega.segmentstore.storage.SegmentHandle;
 import io.pravega.segmentstore.storage.SegmentRollingPolicy;
 import io.pravega.segmentstore.storage.Storage;
+import io.pravega.segmentstore.storage.chunklayer.ChunkedSegmentStorage;
+import io.pravega.segmentstore.storage.chunklayer.ChunkedSegmentStorageConfig;
+import io.pravega.segmentstore.storage.mocks.InMemoryChunkStorage;
+import io.pravega.segmentstore.storage.mocks.InMemoryMetadataStore;
+import io.pravega.segmentstore.storage.mocks.InMemoryTaskQueueManager;
 import io.pravega.test.common.ErrorInjector;
 import java.io.InputStream;
 import java.time.Duration;
@@ -28,7 +33,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.concurrent.NotThreadSafe;
 import lombok.Setter;
 
@@ -38,9 +43,9 @@ import lombok.Setter;
  */
 @NotThreadSafe
 public class TestStorage implements Storage {
-    private final Storage wrappedStorage;
+    private final ChunkedSegmentStorage wrappedStorage;
     private final HashMap<String, Long> truncationOffsets;
-    private final InMemoryStorage wrappedSyncStorage;
+    private final InMemoryChunkStorage wrappedChunkStorage;
     @Setter
     private ErrorInjector<Exception> writeSyncErrorInjector;
     @Setter
@@ -78,10 +83,12 @@ public class TestStorage implements Storage {
     @Setter
     private ReadInterceptor readInterceptor;
 
-    public TestStorage(InMemoryStorage wrappedStorage, Executor executor) {
+    public TestStorage(int containerId, InMemoryChunkStorage wrappedStorage, ScheduledExecutorService executor) {
         Preconditions.checkNotNull(wrappedStorage, "wrappedStorage");
-        this.wrappedSyncStorage = Preconditions.checkNotNull(wrappedStorage, "wrappedStorage");
-        this.wrappedStorage = new AsyncStorageWrapper(wrappedStorage, executor);
+        this.wrappedChunkStorage = Preconditions.checkNotNull(wrappedStorage, "wrappedStorage");
+        this.wrappedStorage = new ChunkedSegmentStorage(containerId, wrappedStorage,
+                new InMemoryMetadataStore(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executor), executor,
+                ChunkedSegmentStorageConfig.DEFAULT_CONFIG);
         this.truncationOffsets = new HashMap<>();
     }
 
@@ -94,6 +101,7 @@ public class TestStorage implements Storage {
     public void initialize(long epoch) {
         // Nothing to do.
         this.wrappedStorage.initialize(epoch);
+        this.wrappedStorage.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
     }
 
     @Override
@@ -235,10 +243,6 @@ public class TestStorage implements Storage {
     public CompletableFuture<Boolean> exists(String streamSegmentName, Duration timeout) {
         return ErrorInjector.throwAsyncExceptionIfNeeded(this.existsErrorInjector,
                 () -> this.wrappedStorage.exists(streamSegmentName, timeout));
-    }
-
-    public void append(SegmentHandle handle, InputStream data, int length) {
-        this.wrappedSyncStorage.append(handle, data, length);
     }
 
     public void truncateDirectly(SegmentHandle handle, long offset) {
