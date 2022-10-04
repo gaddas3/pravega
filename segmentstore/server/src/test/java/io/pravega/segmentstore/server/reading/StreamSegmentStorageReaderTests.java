@@ -41,6 +41,7 @@ import org.junit.rules.Timeout;
  * Unit tests for the StreamSegmentStorageReader class.
  */
 public class StreamSegmentStorageReaderTests extends ThreadPooledTestSuite {
+    private static final int CONTAINER_ID = 42;
     private static final String SEGMENT_NAME = "Segment";
     private static final int SEGMENT_APPEND_COUNT = 10;
     private static final int SEGMENT_LENGTH = SEGMENT_APPEND_COUNT * 1024;
@@ -196,7 +197,6 @@ public class StreamSegmentStorageReaderTests extends ThreadPooledTestSuite {
 
     private Storage createStorage() {
         val factory = new InMemorySimpleStorageFactory(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executorService(), false);
-        val storage = factory.createStorageAdapter(42, new InMemoryMetadataStore(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executorService()));
-        return storage;
+        return factory.createStorageAdapter(CONTAINER_ID, new InMemoryMetadataStore(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executorService()));
     }
 }

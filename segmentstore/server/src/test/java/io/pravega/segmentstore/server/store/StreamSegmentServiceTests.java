@@ -45,7 +45,6 @@ public class StreamSegmentServiceTests extends StreamSegmentStoreTestBase {
         }
 
         if (this.storageFactory != null) {
-            //this.storageFactory.close();
             this.storageFactory = null;
         }
     }
