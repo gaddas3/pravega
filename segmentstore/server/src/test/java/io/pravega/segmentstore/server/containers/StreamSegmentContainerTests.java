@@ -3314,7 +3314,6 @@ public class StreamSegmentContainerTests extends ThreadPooledTestSuite {
                     metadataStore,
                     executor,
                     ChunkedSegmentStorageConfig.DEFAULT_CONFIG);
-            chunkedSegmentStorage.initialize(1);
             containerIdToStorageMap.put(containerId, chunkedSegmentStorage);
             return chunkedSegmentStorage;
         }
