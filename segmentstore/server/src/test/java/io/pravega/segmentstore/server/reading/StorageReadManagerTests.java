@@ -74,7 +74,7 @@ public class StorageReadManagerTests extends ThreadPooledTestSuite {
         final int offsetIncrement = defaultReadLength / 3;
 
         @Cleanup
-        Storage storage = InMemorySimpleStorageFactory.newStorage(CONTAINER_ID, executorService());
+        val storage = InMemorySimpleStorageFactory.newStorage(CONTAINER_ID, executorService());
         storage.initialize(1);
         byte[] segmentData = populateSegment(storage);
         @Cleanup
@@ -112,7 +112,6 @@ public class StorageReadManagerTests extends ThreadPooledTestSuite {
     public void testInvalidRequests() {
         @Cleanup
         Storage storage = InMemorySimpleStorageFactory.newStorage(CONTAINER_ID, executorService());
-        storage.initialize(1);
 
         // Segment does not exist.
         AssertExtensions.assertThrows(
@@ -135,13 +134,13 @@ public class StorageReadManagerTests extends ThreadPooledTestSuite {
         AssertExtensions.assertSuppliedFutureThrows(
                 "Request was not failed when bad offset was provided.",
                 () -> sendRequest(reader, segmentData.length + 1, 1),
-                ex -> ex instanceof ArrayIndexOutOfBoundsException);
+                ex -> ex instanceof IllegalArgumentException);
 
         // Invalid read length.
         AssertExtensions.assertSuppliedFutureThrows(
                 "Request was not failed when bad offset + length was provided.",
                 () -> sendRequest(reader, segmentData.length - 1, 2),
-                ex -> ex instanceof ArrayIndexOutOfBoundsException);
+                ex -> ex instanceof IllegalArgumentException);
 
         // Make sure valid request succeeds after invalid one
         sendRequest(reader, 0, 1).join();

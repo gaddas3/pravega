@@ -44,7 +44,6 @@ import io.pravega.segmentstore.server.tables.TableExtensionConfig;
 import io.pravega.segmentstore.server.writer.StorageWriterFactory;
 import io.pravega.segmentstore.server.writer.WriterConfig;
 import io.pravega.segmentstore.storage.DurableDataLogFactory;
-import io.pravega.segmentstore.storage.SegmentRollingPolicy;
 import io.pravega.segmentstore.storage.Storage;
 import io.pravega.segmentstore.storage.StorageFactory;
 import io.pravega.segmentstore.storage.cache.CacheStorage;
@@ -400,7 +399,7 @@ public class DebugStreamSegmentContainerTests extends ThreadPooledTestSuite {
 
         // Get the storage instance
         @Cleanup
-        Storage storage = storageFactory.createStorageAdapter();
+        Storage storage = InMemorySimpleStorageFactory.newStorage(CONTAINER_ID, executorService());
 
         // 4. Move container metadata and its attribute segment to back up segments.
         Map<Integer, String> backUpMetadataSegments = ContainerRecoveryUtils.createBackUpMetadataSegments(storage, containerCount,
@@ -462,10 +461,8 @@ public class DebugStreamSegmentContainerTests extends ThreadPooledTestSuite {
     public void testCopySegment() {
         int dataSize = 10 * 1024 * 1024;
         // Create a storage.
-        StorageFactory storageFactory = new InMemorySimpleStorageFactory(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executorService(), false);
         @Cleanup
-        Storage s = storageFactory.createStorageAdapter();
-        s.initialize(1);
+        Storage s = InMemorySimpleStorageFactory.newStorage(CONTAINER_ID, executorService());
         log.info("Created a storage instance");
 
         String sourceSegmentName = "segment-" + RANDOM.nextInt();

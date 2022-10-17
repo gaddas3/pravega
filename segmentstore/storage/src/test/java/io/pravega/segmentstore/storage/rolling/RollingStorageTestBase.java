@@ -25,7 +25,6 @@ import java.io.SequenceInputStream;
 import java.util.Random;
 import lombok.Cleanup;
 import lombok.val;
-import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -33,13 +32,6 @@ import org.junit.Test;
  */
 public abstract class RollingStorageTestBase extends StorageTestBase {
     protected static final long DEFAULT_ROLLING_SIZE = (int) (APPEND_FORMAT.length() * 1.5);
-
-    /**
-     * Indicates the layout format to test.
-     * For AsycStorageWrapper and RollingStorage it is set to true.
-     * For ChunkedSegmentStorage set to false.
-     */
-    protected boolean useOldLayout = true;
 
     @Override
     public void testFencing() throws Exception {

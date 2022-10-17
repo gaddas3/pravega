@@ -18,7 +18,6 @@ package io.pravega.segmentstore.storage.mocks;
 import io.pravega.common.concurrent.ExecutorServiceHelpers;
 import io.pravega.common.util.Property;
 import io.pravega.segmentstore.storage.SimpleStorageFactory;
-import io.pravega.segmentstore.storage.StorageFactory;
 import io.pravega.segmentstore.storage.chunklayer.ChunkedSegmentStorage;
 import io.pravega.segmentstore.storage.chunklayer.ChunkedSegmentStorageConfig;
 import io.pravega.segmentstore.storage.noop.StorageExtraConfig;

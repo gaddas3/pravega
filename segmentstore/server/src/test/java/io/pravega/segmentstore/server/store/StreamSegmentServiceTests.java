@@ -33,7 +33,7 @@ public class StreamSegmentServiceTests extends StreamSegmentStoreTestBase {
 
     @Before
     public void setUp() {
-        this.storageFactory = new InMemorySimpleStorageFactory(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executorService(), false);
+        this.storageFactory = new InMemorySimpleStorageFactory(ChunkedSegmentStorageConfig.DEFAULT_CONFIG, executorService(), true);
         this.durableDataLogFactory = new PermanentDurableDataLogFactory(executorService());
     }
 
