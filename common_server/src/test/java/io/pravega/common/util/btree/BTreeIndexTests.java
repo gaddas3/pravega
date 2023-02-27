@@ -24,14 +24,7 @@ import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.common.IntentionalException;
 import io.pravega.test.common.ThreadPooledTestSuite;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -52,14 +45,14 @@ public class BTreeIndexTests extends ThreadPooledTestSuite {
     private static final BufferViewComparator KEY_COMPARATOR = BufferViewComparator.create();
     private static final int KEY_LENGTH = 4;
     private static final int VALUE_LENGTH = 2;
-    private static final int MAX_PAGE_SIZE = 128;
+    private static final int MAX_PAGE_SIZE = 64;
     private static final int MAX_ENTRIES_PER_PAGE = MAX_PAGE_SIZE / (KEY_LENGTH + VALUE_LENGTH) - 2;
 
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     @Override
     protected int getThreadPoolSize() {
-        return 3;
+        return 10;
     }
 
     /**
@@ -194,6 +187,51 @@ public class BTreeIndexTests extends ThreadPooledTestSuite {
             val value = index.get(e.getKey(), TIMEOUT).join();
             Assert.assertEquals("Unexpected key.", e.getValue(), value);
         }
+    }
+
+    @Test
+    public void testGetParallel() {
+        final int entryCount = 1024;
+        final int readCount = 8;
+        testGetParallel(entryCount, readCount);
+    }
+
+    @Test
+    public void testGetParallelSingle() {
+        final int entryCount = 16;
+        final int readCount = 1;
+        testGetParallel(entryCount, readCount);
+    }
+
+    private void testGetParallel(int entryCount, int readCount) {
+        val ds = new DataSource();
+        val index = defaultBuilder(ds).build();
+        index.initialize(TIMEOUT).join();
+        val entries = generate(entryCount);
+        for (val e : entries) {
+            index.update(Collections.singleton(e), TIMEOUT).join();
+        }
+
+        System.out.println("===== Done adding data...====");
+        System.out.println("Test - total fetch calls after update "+ index.getFetchCount().get());
+        // Reset the fetch count
+        index.getFetchCount().set(0);
+        Random random = new Random(System.currentTimeMillis());
+
+        HashSet<Integer> keyIndex = new HashSet<>();
+        while (keyIndex.size() != readCount) {
+            keyIndex.add(random.nextInt(entryCount));
+        }
+        ArrayList<CompletableFuture<ByteArraySegment>> f = new ArrayList<>();
+        int j = 0;
+        for (val i : keyIndex) {
+            System.out.println("Test - get "+ (++j) +" -- item no." + i);
+            val e = entries.get(i);
+            f.add(index.get(e.getKey(), TIMEOUT));
+        }
+        Futures.allOf(f).join();
+
+        System.out.println("Test - total fetch calls after get "+ index.getFetchCount().get());
     }
 
     /**

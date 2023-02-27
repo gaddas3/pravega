@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -288,6 +289,7 @@ public class BTreeIndex {
 
         // Lookup the page where the Key should exist (if at all).
         PageCollection pageCollection = new PageCollection(this.state.length);
+        System.out.println("get - PageCollection created for " + this.state.length + " " + pageCollection);
         return locatePage(key, pageCollection, timer)
                 .thenApplyAsync(page -> page.getPage().searchExact(key), this.executor);
     }
@@ -313,6 +315,7 @@ public class BTreeIndex {
         ensureInitialized();
         TimeoutTimer timer = new TimeoutTimer(timeout);
         PageCollection pageCollection = new PageCollection(this.state.length);
+        System.out.println("get - PageCollection created for " + this.state.length + " " + pageCollection);
         val gets = keys.stream()
                 .map(key -> locatePage(key, pageCollection, timer)
                         .thenApplyAsync(page -> page.getPage().searchExact(key), this.executor))
@@ -668,6 +671,7 @@ public class BTreeIndex {
      */
     private CompletableFuture<PageWrapper> locatePage(Function<BTreePage, PagePointer> getChildPointer, Predicate<PageWrapper> found,
                                                       PageCollection pageCollection, TimeoutTimer timer) {
+        System.out.println("locatePage - pageCollection = " + pageCollection.toString());
         AtomicReference<PagePointer> pagePointer = new AtomicReference<>(new PagePointer(null, this.state.rootPageOffset, this.state.rootPageLength));
         CompletableFuture<PageWrapper> result = new CompletableFuture<>();
         AtomicReference<PageWrapper> parentPage = new AtomicReference<>(null);
@@ -694,6 +698,12 @@ public class BTreeIndex {
     }
 
     /**
+     * Debug only.
+     */
+    @Getter
+    private AtomicInteger fetchCount = new AtomicInteger();
+
+    /**
      * Loads up a single Page.
      *
      * @param pagePointer    A PagePointer indicating the Page to load.
@@ -704,6 +714,7 @@ public class BTreeIndex {
      * @return A CompletableFuture containing a PageWrapper for the sought page.
      */
     private CompletableFuture<PageWrapper> fetchPage(PagePointer pagePointer, PageWrapper parentPage, PageCollection pageCollection, Duration timeout) {
+        System.out.println(fetchCount.incrementAndGet() +" fetchPage " + pagePointer.toString() + " pageCollection = " + pageCollection.toString());
         PageWrapper fromCache = pageCollection.get(pagePointer.getOffset());
         if (fromCache != null) {
             return CompletableFuture.completedFuture(fromCache);
