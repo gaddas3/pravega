@@ -165,15 +165,13 @@ public class SegmentHelper implements AutoCloseable {
                                                  final long rolloverSizeBytes) {
         final String qualifiedStreamSegmentName = getQualifiedStreamSegmentName(scope, stream, segmentId);
         final Controller.NodeUri uri = getSegmentUri(scope, stream, segmentId);
-        return createSegment(policy, controllerToken, clientRequestId, rolloverSizeBytes, qualifiedStreamSegmentName, ModelHelper.encode(uri));
+        return createSegment(policy, qualifiedStreamSegmentName, rolloverSizeBytes, controllerToken, clientRequestId, ModelHelper.encode(uri));
     }
 
     public CompletableFuture<Void> createSegment(ScalingPolicy policy,
-                                                  String controllerToken,
-                                                  long clientRequestId,
-                                                  long rolloverSizeBytes,
-                                                  String qualifiedStreamSegmentName,
-                                                  PravegaNodeUri uri) {
+                                                 String qualifiedStreamSegmentName, long rolloverSizeBytes, String controllerToken,
+                                                 long clientRequestId,
+                                                 PravegaNodeUri uri) {
         final WireCommandType type = WireCommandType.CREATE_SEGMENT;
 
         RawClient connection = new RawClient(uri, connectionPool);

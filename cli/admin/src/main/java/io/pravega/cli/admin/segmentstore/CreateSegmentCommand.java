@@ -52,19 +52,19 @@ public class CreateSegmentCommand extends SegmentStoreCommand {
         @Cleanup
         SegmentHelper segmentHelper = instantiateSegmentHelper(zkClient, pool);
 
-        CompletableFuture<Void> reply = segmentHelper.createSegment(ScalingPolicy.builder().build(),
-                super.authHelper.retrieveMasterToken(),
+        CompletableFuture<Void> reply = segmentHelper.createSegment(ScalingPolicy.builder()
+                        .scaleType(ScalingPolicy.ScaleType.FIXED_NUM_SEGMENTS)
+                        .build(),
+                fullyQualifiedSegmentName, 32 * 1024 * 1024L, super.authHelper.retrieveMasterToken(),
                 0L,
-                32 * 1024 * 1024L,
-                fullyQualifiedSegmentName,
                 new PravegaNodeUri(segmentStoreHost, getServiceConfig().getAdminGatewayPort()));
         reply.join();
-        output("Create: %s created successfully", fullyQualifiedSegmentName);
+        output("CreateSegment: %s created successfully", fullyQualifiedSegmentName);
     }
 
     public static CommandDescriptor descriptor() {
         return new CommandDescriptor(COMPONENT, "create-segment", "Deletes a given Segment.",
-                new ArgDescriptor("qualified-segment-name", "Fully qualified name of the Segment to delete (e.g., scope/stream/0.#epoch.0)."),
+                new ArgDescriptor("qualified-segment-name", "Fully qualified name of the Segment to create (e.g., scope/stream/0.#epoch.0)."),
                 new ArgDescriptor("segmentstore-endpoint", "Address of the Segment Store we want to send this request."));
     }
 }
