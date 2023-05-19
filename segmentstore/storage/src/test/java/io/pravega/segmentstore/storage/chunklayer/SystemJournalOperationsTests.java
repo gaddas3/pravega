@@ -1164,7 +1164,7 @@ public class SystemJournalOperationsTests extends ThreadPooledTestSuite {
          * Bootstrap
          */
         void bootstrap() throws Exception {
-            systemJournal.bootstrap(epoch, snapshotInfoStore).join();
+            systemJournal.bootstrap(epoch, snapshotInfoStore, false).join();
             garbageCollector.initialize(new InMemoryTaskQueueManager());
             deleteGarbage();
         }

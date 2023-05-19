@@ -25,6 +25,7 @@ import io.pravega.common.io.serialization.RevisionDataInput;
 import io.pravega.common.io.serialization.RevisionDataOutput;
 import io.pravega.common.io.serialization.VersionedSerializer;
 import io.pravega.common.util.ByteArraySegment;
+import io.pravega.segmentstore.storage.StorageNotPrimaryException;
 import io.pravega.segmentstore.storage.metadata.ChunkMetadata;
 import io.pravega.segmentstore.storage.metadata.ChunkMetadataStore;
 import io.pravega.segmentstore.storage.metadata.MetadataTransaction;
@@ -97,6 +98,8 @@ public class SystemJournal {
      * Serializer for {@link SystemJournal.SystemSnapshotRecord}.
      */
     private static final SystemSnapshotRecord.Serializer SYSTEM_SNAPSHOT_SERIALIZER = new SystemSnapshotRecord.Serializer();
+
+    private static final SnapshotInfo.Serializer SNAPSHOT_INFO_SERIALIZER = new SnapshotInfo.Serializer();
 
     @Getter
     private final ChunkStorage chunkStorage;
@@ -306,8 +309,9 @@ public class SystemJournal {
      *
      * @param epoch             Epoch of the current container instance.
      * @param snapshotInfoStore {@link SnapshotInfoStore} that stores {@link SnapshotInfo}.
+     * @param skipStoreLookup   When true, {@link SnapshotInfoStore} lookup is skipped while looking for latest snapshot.
      */
-    public CompletableFuture<Void> bootstrap(long epoch, SnapshotInfoStore snapshotInfoStore) {
+    public CompletableFuture<Void> bootstrap(long epoch, SnapshotInfoStore snapshotInfoStore, boolean skipStoreLookup) {
         this.epoch = epoch;
         this.snapshotInfoStore = Preconditions.checkNotNull(snapshotInfoStore, "snapshotInfoStore");
         Preconditions.checkState(!reentryGuard.getAndSet(true), "bootstrap called multiple times.");
@@ -321,7 +325,7 @@ public class SystemJournal {
         val state = new BootstrapState();
 
         // Step 1: Create metadata records for system segments from latest snapshot.
-        return findLatestSnapshot()
+        return findLatestSnapshot(skipStoreLookup)
                 .thenComposeAsync(snapshot ->
                    applySystemSnapshotRecord(txn, state, snapshot),
                 executor)
@@ -551,37 +555,166 @@ public class SystemJournal {
                                 garbageCollector.addChunksToGarbage(-1, pendingGarbageChunks);
                                 pendingGarbageChunks.clear();
                             }, executor)
+                            .thenComposeAsync(v2 -> writeSnapshotInfoToFile(info), executor)
                             .exceptionally(e -> {
-                                log.error("Unable to persist snapshot info.{}", currentSnapshotIndex, e);
+                                log.error("SystemJournal[{}] Unable to persist snapshot info.{}", containerId, currentSnapshotIndex, e);
                                 return null;
                             });
                 }, executor);
     }
 
     /**
+     * Writes SnapshotInfo to a well known file.
+     */
+    private CompletableFuture<Void> writeSnapshotInfoToFile(SnapshotInfo info) {
+        val snapshotInfoFileName = NameUtils.getSystemJournalSnapshotInfoFileName(containerId);
+        try {
+            val isDone = new AtomicBoolean(false);
+            val attempts = new AtomicInteger();
+            val bytes = SNAPSHOT_INFO_SERIALIZER.serialize(info);
+
+            return Futures.loop(
+                    () -> !isDone.get(),
+                    () -> {
+                        return chunkStorage.exists(snapshotInfoFileName)
+                                .thenComposeAsync( exists -> {
+                                    if (exists) {
+                                        // Read back and make sure higher epoch has not already written it
+                                        return readSnapshotInfoFromFile()
+                                                .thenComposeAsync( existingSnapshot -> {
+                                                    if (existingSnapshot.getEpoch() > epoch) {
+                                                        return CompletableFuture.failedFuture(new StorageNotPrimaryException(""));
+                                                    } else {
+                                                        return chunkStorage.delete(ChunkHandle.writeHandle(snapshotInfoFileName));
+                                                    }
+                                                }, executor);
+                                    } else {
+                                        return CompletableFuture.completedFuture(null);
+                                    }
+                                }, executor)
+                                .thenComposeAsync(v -> chunkStorage.createWithContent(snapshotInfoFileName,
+                                                bytes.getLength(),
+                                                new ByteArrayInputStream(bytes.array(), bytes.arrayOffset(), bytes.getLength())),
+                                        executor)
+                                .thenComposeAsync(h -> readSnapshotInfoFromFile(), executor)
+                                .thenApplyAsync( readBackInfo -> {
+                                    if (readBackInfo.getEpoch() > epoch) {
+                                        return CompletableFuture.failedFuture(new StorageNotPrimaryException(""));
+                                    }
+                                    if (!info.equals(readBackInfo)) {
+                                        return CompletableFuture.failedFuture(new IllegalStateException(""));
+                                    }
+                                    return CompletableFuture.completedFuture(null);
+                                }, executor)
+                                .handleAsync((v, e) -> {
+                                    if (null != e) {
+                                        val ex = Exceptions.unwrap(e);
+                                        if (ex instanceof StorageNotPrimaryException) {
+                                            log.warn("SystemJournal[{}] Error while snapshot info to file {}. info = {}", containerId, snapshotInfoFileName, info, e);
+                                            throw new CompletionException(e);
+                                        }
+                                        if (attempts.incrementAndGet() > config.getMaxJournalWriteAttempts()) {
+                                            log.warn("SystemJournal[{}] Error while snapshot info to file {}. info = {}", containerId, snapshotInfoFileName, info, e);
+                                            throw new CompletionException(e);
+                                        }
+                                        log.warn("SystemJournal[{}] Error while  snapshot info to file {}. info = {}", containerId, snapshotInfoFileName, info, e);
+                                    } else {
+                                        // No exception we are done
+                                        log.info("SystemJournal[{}] Saved snapshot info to file {}. info = {}", containerId, snapshotInfoFileName, info);
+                                        isDone.set(true);
+                                    }
+                                    return null;
+                                }, executor);
+                    }, executor);
+
+        } catch (IOException e) {
+            return CompletableFuture.failedFuture(new ChunkStorageException(snapshotInfoFileName, "Unable to serialize", e));
+        }
+    }
+
+    /**
      * Find and apply latest snapshot.
      */
-    private CompletableFuture<SystemSnapshotRecord> findLatestSnapshot() {
+    private CompletableFuture<SystemSnapshotRecord> findLatestSnapshot(boolean skipStoreLookup) {
         // Step 1: Read snapshot info.
-        return snapshotInfoStore.readSnapshotInfo()
-                .thenComposeAsync(snapshotInfo -> {
-                    if (null != snapshotInfo) {
-                        val snapshotFileName = NameUtils.getSystemJournalSnapshotFileName(containerId, snapshotInfo.getEpoch(), snapshotInfo.getSnapshotId());
-                        log.debug("SystemJournal[{}] Snapshot info read. {} pointing to {}", containerId, snapshotInfo, snapshotFileName);
+        return readSnapshotInfo(skipStoreLookup)
+            .thenComposeAsync(snapshotInfo -> {
+                if (null != snapshotInfo) {
+                    val snapshotFileName = NameUtils.getSystemJournalSnapshotFileName(containerId, snapshotInfo.getEpoch(), snapshotInfo.getSnapshotId());
+                    log.debug("SystemJournal[{}] Snapshot info read. {} pointing to {}", containerId, snapshotInfo, snapshotFileName);
 
-                        // Step 2: Validate and Read contents.
-                        return getContents(snapshotFileName, false)
-                                // Step 3: Deserialize and return.
-                                .thenApplyAsync(contents -> readSnapshotRecord(snapshotInfo, contents), executor)
-                                .exceptionally(e -> {
-                                    throw new CompletionException(new IllegalStateException(
-                                            String.format("Chunk pointed by SnapshotInfo could not be read. chunk name = %s", snapshotFileName),
-                                            Exceptions.unwrap(e)));
-                                });
-                    } else {
-                        log.info("SystemJournal[{}] No Snapshot info available. This is ok if this is new installation", containerId);
-                        return CompletableFuture.completedFuture(null);
+                    // Step 2: Validate and Read contents.
+                    return getContents(snapshotFileName, false)
+                            // Step 3: Deserialize and return.
+                            .thenApplyAsync(contents -> readSnapshotRecord(snapshotInfo, contents), executor)
+                            .exceptionally(e -> {
+                                throw new CompletionException(new IllegalStateException(
+                                        String.format("Chunk pointed by SnapshotInfo could not be read. chunk name = %s", snapshotFileName),
+                                        Exceptions.unwrap(e)));
+                            });
+                } else {
+                    log.info("SystemJournal[{}] No Snapshot info available. This is ok if this is new installation", containerId);
+                    return CompletableFuture.completedFuture(null);
+                }
+            }, executor);
+    }
+
+    /**
+     * Read snapshot info.
+     */
+    private CompletableFuture<SnapshotInfo> readSnapshotInfo(boolean skipStoreLookup) {
+
+        final CompletableFuture<SnapshotInfo> snapshotInfoFromStoreFuture;
+        boolean shouldReadFromFile = config.isSelfCheckForSnapshotEnabled();
+        if (skipStoreLookup) {
+            snapshotInfoFromStoreFuture = CompletableFuture.completedFuture(null);
+            shouldReadFromFile = true;
+        } else {
+            log.info("SystemJournal[{}] reading snapshot info from snapshot info store. {}", containerId);
+            snapshotInfoFromStoreFuture = snapshotInfoStore.readSnapshotInfo();
+        }
+
+        if (!shouldReadFromFile) {
+            return snapshotInfoFromStoreFuture;
+        }
+
+        return snapshotInfoFromStoreFuture
+            .thenComposeAsync(snapshotInfoFromStore ->
+                    readSnapshotInfoFromFile()
+                    .thenComposeAsync( snapshotInfoFromFile -> {
+                        if ( null == snapshotInfoFromFile ) {
+                            log.info("SystemJournal[{}] No Snapshot info available from storage. This is ok if this is new installation", containerId);
+                        } else {
+                            if (!skipStoreLookup) {
+                                Preconditions.checkState(snapshotInfoFromStore != null, "Snapshot info from store should not be null");
+                                Preconditions.checkState(snapshotInfoFromStore.equals(snapshotInfoFromFile),
+                                        String.format("Snapshot info from store should match one from file. File = %s, Store = %s", snapshotInfoFromFile, snapshotInfoFromStore));
+                                log.debug("SystemJournal[{}] readSnapshotInfo. File = {}, Store = {}", containerId, snapshotInfoFromFile, snapshotInfoFromStore);
+                            }
+                        }
+                        return CompletableFuture.completedFuture(snapshotInfoFromFile);
+                    }, executor), executor);
+    }
+
+    private CompletableFuture<SnapshotInfo> readSnapshotInfoFromFile() {
+        val snapshotInfoFileName = NameUtils.getSystemJournalSnapshotInfoFileName(containerId);
+        return getContents(snapshotInfoFileName, false)
+                .exceptionally(e -> {
+                    log.warn(String.format("Chunk pointed by SnapshotInfo could not be read. chunk name = %s", snapshotInfoFileName),
+                            Exceptions.unwrap(e));
+                    return null;
+                })
+                .thenApplyAsync(contents -> {
+                    if (contents != null) {
+                        log.info("SystemJournal[{}] reading snapshot info from snapshot info file. {}", containerId);
+                        try {
+                            val snapshotInfo = SNAPSHOT_INFO_SERIALIZER.deserialize(contents);
+                            return snapshotInfo;
+                        } catch (Exception e) {
+                            log.error("SystemJournal[{}] Error while reading snapshot info {}", containerId, e);
+                        }
                     }
+                    return null;
                 }, executor);
     }
 

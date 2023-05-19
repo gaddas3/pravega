@@ -90,6 +90,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
     private ChunkedSegmentStorageConfig.ChunkedSegmentStorageConfigBuilder getDefaultConfigBuilder(SegmentRollingPolicy policy) {
         return ChunkedSegmentStorageConfig.DEFAULT_CONFIG.toBuilder()
                 .selfCheckEnabled(true)
+                .selfCheckForSnapshotEnabled(true)
                 .garbageCollectionDelay(Duration.ZERO)
                 .storageMetadataRollingPolicy(policy);
     }
@@ -263,7 +264,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
 
         segmentStorage.initialize(epoch);
         segmentStorage.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
-        segmentStorage.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage);
         segmentStorage.create("test", null).get();
 
@@ -320,7 +321,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage1.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage1.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage1.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage1);
         checkSystemSegmentsLayout(segmentStorage1);
 
@@ -343,7 +344,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage2.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage2.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage2.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage2);
         checkSystemSegmentsLayout(segmentStorage2);
 
@@ -391,7 +392,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage1.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage1.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage1.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage1);
         checkSystemSegmentsLayout(segmentStorage1);
 
@@ -412,7 +413,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage2.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage2.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage2.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage2);
         checkSystemSegmentsLayout(segmentStorage2);
 
@@ -470,7 +471,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage1.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage1.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage1.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage1);
         checkSystemSegmentsLayout(segmentStorage1);
 
@@ -494,7 +495,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage2.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage2.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage2.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage2);
         checkSystemSegmentsLayout(segmentStorage2);
 
@@ -543,7 +544,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage1.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage1.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage1.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage1);
         checkSystemSegmentsLayout(segmentStorage1);
 
@@ -577,7 +578,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage2.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage2.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage2.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage2);
         checkSystemSegmentsLayout(segmentStorage2);
 
@@ -635,7 +636,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
             segmentStorageInLoop.initialize(epoch);
             segmentStorageInLoop.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
-            segmentStorageInLoop.bootstrap(snapshotInfoStore, null).join();
+            segmentStorageInLoop.bootstrap(snapshotInfoStore).join();
             deleteGarbage(segmentStorageInLoop);
             checkSystemSegmentsLayout(segmentStorageInLoop);
 
@@ -668,7 +669,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorageFinal.initialize(epoch);
         segmentStorageFinal.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
-        segmentStorageFinal.bootstrap(snapshotInfoStore, null).join();
+        segmentStorageFinal.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorageFinal);
         checkSystemSegmentsLayout(segmentStorageFinal);
 
@@ -746,7 +747,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
             segmentStorageInLoop.initialize(epoch);
             segmentStorageInLoop.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
-            segmentStorageInLoop.bootstrap(snapshotInfoStore, null).join();
+            segmentStorageInLoop.bootstrap(snapshotInfoStore).join();
             deleteGarbage(segmentStorageInLoop);
             checkSystemSegmentsLayout(segmentStorageInLoop);
 
@@ -801,7 +802,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorageFinal.initialize(epoch);
         segmentStorageFinal.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
-        segmentStorageFinal.bootstrap(snapshotInfoStore, null).join();
+        segmentStorageFinal.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorageFinal);
         checkSystemSegmentsLayout(segmentStorageFinal);
 
@@ -897,7 +898,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage1.initialize(epoch);
         segmentStorage1.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
         // Bootstrap
-        segmentStorage1.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage1.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage1);
         checkSystemSegmentsLayout(segmentStorage1);
 
@@ -919,7 +920,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage2.initialize(epoch);
         segmentStorage2.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
-        segmentStorage2.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage2.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage2);
         checkSystemSegmentsLayout(segmentStorage2);
 
@@ -979,7 +980,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage1.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
         // Bootstrap
-        segmentStorage1.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage1.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage1);
         checkSystemSegmentsLayout(segmentStorage1);
 
@@ -999,7 +1000,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         segmentStorage2.initialize(epoch);
         segmentStorage2.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
 
-        segmentStorage2.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage2.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage2);
         checkSystemSegmentsLayout(segmentStorage2);
 
@@ -1056,7 +1057,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         // Inital set of additions
         SystemJournal systemJournalBefore = new SystemJournal(containerId, chunkStorage, metadataStoreBeforeCrash, garbageCollector1, config, executorService());
 
-        systemJournalBefore.bootstrap(epoch, snapshotInfoStore).join();
+        systemJournalBefore.bootstrap(epoch, snapshotInfoStore, false).join();
 
         String lastChunk = null;
         long totalBytesWritten = 0;
@@ -1094,7 +1095,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector2.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash, garbageCollector2, config, executorService());
 
-        systemJournalAfter.bootstrap(epoch + 1, snapshotInfoStore).join();
+        systemJournalAfter.bootstrap(epoch + 1, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash, systemSegmentName, policy.getMaxLength(), 10);
         TestUtils.checkSegmentBounds(metadataStoreAfterCrash, systemSegmentName, 0, totalBytesWritten);
@@ -1110,7 +1111,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector3.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter2 = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash2, garbageCollector3, config, executorService());
 
-        systemJournalAfter2.bootstrap(epoch + 2, snapshotInfoStore).join();
+        systemJournalAfter2.bootstrap(epoch + 2, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash2, systemSegmentName, policy.getMaxLength(), 10);
     }
@@ -1147,7 +1148,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         // Inital set of additions
         SystemJournal systemJournalBefore = new SystemJournal(containerId, chunkStorage, metadataStoreBeforeCrash, garbageCollector1, config, executorService());
 
-        systemJournalBefore.bootstrap(epoch, snapshotInfoStore).join();
+        systemJournalBefore.bootstrap(epoch, snapshotInfoStore, false).join();
 
         String lastChunk = null;
         long totalBytesWritten = 0;
@@ -1185,7 +1186,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector2.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash, garbageCollector2, config, executorService());
 
-        systemJournalAfter.bootstrap(epoch + 1, snapshotInfoStore).join();
+        systemJournalAfter.bootstrap(epoch + 1, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash, systemSegmentName, policy.getMaxLength(), 10);
         TestUtils.checkSegmentBounds(metadataStoreAfterCrash, systemSegmentName, 0, totalBytesWritten);
@@ -1201,7 +1202,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector3.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter2 = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash2, garbageCollector3, config, executorService());
 
-        systemJournalAfter2.bootstrap(epoch + 2, snapshotInfoStore).join();
+        systemJournalAfter2.bootstrap(epoch + 2, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash2, systemSegmentName, policy.getMaxLength(), 10);
     }
@@ -1283,7 +1284,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         // Initial set of additions
         SystemJournal systemJournalBefore = new SystemJournal(containerId, chunkStorage, metadataStoreBeforeCrash, garbageCollector1, config, executorService());
 
-        systemJournalBefore.bootstrap(epoch + 1, snapshotInfoStore).join();
+        systemJournalBefore.bootstrap(epoch + 1, snapshotInfoStore, false).join();
 
         // Failover
         @Cleanup
@@ -1297,7 +1298,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector2.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash, garbageCollector2, config, executorService());
 
-        systemJournalAfter.bootstrap(epoch + 2, snapshotInfoStore).join();
+        systemJournalAfter.bootstrap(epoch + 2, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash, systemSegmentName, policy.getMaxLength(), 10);
         TestUtils.checkSegmentBounds(metadataStoreAfterCrash, systemSegmentName, 0, totalBytesWritten);
@@ -1313,7 +1314,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector3.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter2 = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash2, garbageCollector3, config, executorService());
 
-        systemJournalAfter2.bootstrap(epoch + 3, snapshotInfoStore).join();
+        systemJournalAfter2.bootstrap(epoch + 3, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash2, systemSegmentName, policy.getMaxLength(), 10);
     }
@@ -1403,7 +1404,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         // Initial set of additions
         SystemJournal systemJournalBefore = new SystemJournal(containerId, chunkStorage, metadataStoreBeforeCrash, garbageCollector1, config, executorService());
 
-        systemJournalBefore.bootstrap(epoch + 1, snapshotInfoStore).join();
+        systemJournalBefore.bootstrap(epoch + 1, snapshotInfoStore, false).join();
 
         // Failover
         @Cleanup
@@ -1417,7 +1418,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector2.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash, garbageCollector2, config, executorService());
 
-        systemJournalAfter.bootstrap(epoch + 2, snapshotInfoStore).join();
+        systemJournalAfter.bootstrap(epoch + 2, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash, systemSegmentName, policy.getMaxLength(), 10);
         TestUtils.checkSegmentBounds(metadataStoreAfterCrash, systemSegmentName, 0, totalBytesWritten);
@@ -1433,7 +1434,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector3.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter2 = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash2, garbageCollector3, config, executorService());
 
-        systemJournalAfter2.bootstrap(epoch + 3, snapshotInfoStore).join();
+        systemJournalAfter2.bootstrap(epoch + 3, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash2, systemSegmentName, policy.getMaxLength(), 10);
     }
@@ -1472,7 +1473,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
 
         // Step 1: Initial set of additions
         SystemJournal systemJournalBefore = new SystemJournal(containerId, chunkStorage, metadataStoreBeforeCrash, garbageCollector1, config, executorService());
-        systemJournalBefore.bootstrap(epoch, snapshotInfoStore).join();
+        systemJournalBefore.bootstrap(epoch, snapshotInfoStore, false).join();
 
         String lastChunk = null;
         long totalBytesWritten = 0;
@@ -1510,7 +1511,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector2.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash, garbageCollector2, config, executorService());
 
-        systemJournalAfter.bootstrap(2, snapshotInfoStore).join();
+        systemJournalAfter.bootstrap(2, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash, systemSegmentName, policy.getMaxLength(), 10);
         TestUtils.checkSegmentBounds(metadataStoreAfterCrash, systemSegmentName, 0, totalBytesWritten);
@@ -1538,7 +1539,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector3.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter2 = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash2, garbageCollector3, config, executorService());
 
-        systemJournalAfter2.bootstrap(3, snapshotInfoStore).join();
+        systemJournalAfter2.bootstrap(3, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentLayout(metadataStoreAfterCrash2, systemSegmentName, policy.getMaxLength(), 5);
         TestUtils.checkSegmentBounds(metadataStoreAfterCrash2, systemSegmentName, 10, 20);
@@ -1566,7 +1567,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
         garbageCollector4.initialize(new InMemoryTaskQueueManager()).join();
         SystemJournal systemJournalAfter3 = new SystemJournal(containerId, chunkStorage, metadataStoreAfterCrash3, garbageCollector4, config, executorService());
 
-        systemJournalAfter3.bootstrap(4, snapshotInfoStore).join();
+        systemJournalAfter3.bootstrap(4, snapshotInfoStore, false).join();
 
         TestUtils.checkSegmentBounds(metadataStoreAfterCrash3, systemSegmentName, 20, 20);
     }
@@ -1604,7 +1605,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
 
         // Bootstrap
         segmentStorage1.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
-        segmentStorage1.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage1.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage1);
 
         checkSystemSegmentsLayout(segmentStorage1);
@@ -1649,7 +1650,7 @@ public class SystemJournalTests extends ThreadPooledTestSuite {
 
         // Bootstrap
         segmentStorage2.getGarbageCollector().initialize(new InMemoryTaskQueueManager()).join();
-        segmentStorage2.bootstrap(snapshotInfoStore, null).join();
+        segmentStorage2.bootstrap(snapshotInfoStore).join();
         deleteGarbage(segmentStorage2);
         checkSystemSegmentsLayout(segmentStorage2);
 
