@@ -218,7 +218,7 @@ public class ChunkedSegmentStorage implements Storage, StatsReporter {
 
         this.logPrefix = String.format("ChunkedSegmentStorage[%d]", containerId);
         // Now bootstrap
-        return this.systemJournal.bootstrap(epoch, snapshotInfoStore, false);
+        return this.systemJournal.bootstrap(epoch, snapshotInfoStore);
     }
 
     /**
