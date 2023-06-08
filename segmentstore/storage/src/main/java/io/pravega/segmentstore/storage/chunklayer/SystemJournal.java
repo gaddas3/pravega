@@ -543,7 +543,8 @@ public class SystemJournal {
                             .epoch(epoch)
                             .build();
                     return snapshotInfoStore.writeSnapshotInfo(info)
-                            .thenAcceptAsync(v1 -> {
+                            .thenComposeAsync(v1 -> writeSnapshotInfoToFile(info), executor)
+                            .thenAcceptAsync(v2 -> {
                                 val oldSnapshotInfo = lastSavedSnapshotInfo.get();
                                 log.info("SystemJournal[{}] Snapshot info saved.{}", containerId, info);
                                 lastSavedSnapshotInfo.set(info);
@@ -554,7 +555,6 @@ public class SystemJournal {
                                 garbageCollector.addChunksToGarbage(-1, pendingGarbageChunks);
                                 pendingGarbageChunks.clear();
                             }, executor)
-                            .thenComposeAsync(v2 -> writeSnapshotInfoToFile(info), executor)
                             .exceptionally(e -> {
                                 log.error("SystemJournal[{}] Unable to persist snapshot info.{}", containerId, currentSnapshotIndex, e);
                                 return null;
