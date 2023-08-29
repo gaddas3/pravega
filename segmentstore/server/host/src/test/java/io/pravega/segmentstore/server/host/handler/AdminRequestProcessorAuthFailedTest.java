@@ -22,6 +22,9 @@ import io.pravega.segmentstore.server.host.stat.SegmentStatsRecorder;
 import io.pravega.segmentstore.server.host.stat.TableSegmentStatsRecorder;
 import io.pravega.shared.protocol.netty.AdminRequestProcessor;
 import io.pravega.shared.protocol.netty.WireCommands;
+import io.pravega.test.common.InlineExecutor;
+import java.util.concurrent.ScheduledExecutorService;
+import lombok.Cleanup;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -43,7 +46,7 @@ public class AdminRequestProcessorAuthFailedTest {
                 SegmentStatsRecorder.noOp(), TableSegmentStatsRecorder.noOp(),
                 (resource, token, expectedLevel) -> {
                     throw new InvalidTokenException("Token verification failed.");
-                }, false);
+                }, false, getIndexAppendProcessor(store));
     }
 
     @After
@@ -60,5 +63,11 @@ public class AdminRequestProcessorAuthFailedTest {
     public void listStorageChunks() {
         processor.listStorageChunks(new WireCommands.ListStorageChunks("dummy", "", 1));
         verify(connection).send(new WireCommands.AuthTokenCheckFailed(1, "", TOKEN_CHECK_FAILED));
+    }
+
+    private IndexAppendProcessor getIndexAppendProcessor(StreamSegmentStore store) {
+        @Cleanup("shutdown")
+        ScheduledExecutorService executor = new InlineExecutor();
+        return new IndexAppendProcessor(executor, store);
     }
 }

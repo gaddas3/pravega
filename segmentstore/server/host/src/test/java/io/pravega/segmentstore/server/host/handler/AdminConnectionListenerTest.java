@@ -23,12 +23,13 @@ import io.pravega.segmentstore.server.host.delegationtoken.PassingTokenVerifier;
 import io.pravega.shared.protocol.netty.CommandDecoder;
 import io.pravega.shared.protocol.netty.CommandEncoder;
 import io.pravega.shared.protocol.netty.ExceptionLoggingHandler;
+import io.pravega.test.common.InlineExecutor;
 import io.pravega.test.common.SecurityConfigDefaults;
+import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 import lombok.Cleanup;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.List;
 
 import static org.mockito.Mockito.mock;
 
@@ -36,9 +37,12 @@ public class AdminConnectionListenerTest {
 
     @Test
     public void testCreateEncodingStack() {
+
+        StreamSegmentStore store = mock(StreamSegmentStore.class);
         @Cleanup
         AdminConnectionListener listener = new AdminConnectionListener(false, false, "localhost",
-                6622, mock(StreamSegmentStore.class), mock(TableStore.class), new PassingTokenVerifier(), null, null, SecurityConfigDefaults.TLS_PROTOCOL_VERSION);
+                6622, store, mock(TableStore.class), new PassingTokenVerifier(), null, null,
+                SecurityConfigDefaults.TLS_PROTOCOL_VERSION, getIndexAppendProcessor(store));
         List<ChannelHandler> stack = listener.createEncodingStack("connection");
         // Check that the order of encoders is the right one.
         Assert.assertTrue(stack.get(0) instanceof ExceptionLoggingHandler);
@@ -49,9 +53,17 @@ public class AdminConnectionListenerTest {
 
     @Test
     public void testCreateRequestProcessor() {
+        StreamSegmentStore store = mock(StreamSegmentStore.class);
         @Cleanup
         AdminConnectionListener listener = new AdminConnectionListener(false, false, "localhost",
-                6622, mock(StreamSegmentStore.class), mock(TableStore.class), new PassingTokenVerifier(), null, null, SecurityConfigDefaults.TLS_PROTOCOL_VERSION);
+                6622, store, mock(TableStore.class), new PassingTokenVerifier(), null, null,
+                SecurityConfigDefaults.TLS_PROTOCOL_VERSION, getIndexAppendProcessor(store));
         Assert.assertTrue(listener.createRequestProcessor(new TrackedConnection(new ServerConnectionInboundHandler())) instanceof AdminRequestProcessorImpl);
+    }
+
+    private IndexAppendProcessor getIndexAppendProcessor(StreamSegmentStore store) {
+        @Cleanup("shutdown")
+        ScheduledExecutorService executor = new InlineExecutor();
+        return new IndexAppendProcessor(executor, store);
     }
 }

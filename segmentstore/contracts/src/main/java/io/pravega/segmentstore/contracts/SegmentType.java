@@ -41,7 +41,6 @@ public class SegmentType {
      * General Transient Segment with no special roles.
      */
     public static final SegmentType TRANSIENT_SEGMENT = SegmentType.builder().transientSegment().build();
-
     //endregion
 
     //region Flags
