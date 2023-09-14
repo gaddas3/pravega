@@ -83,19 +83,17 @@ public class FlushToStorageCommand extends ContainerCommand {
         output("Flushed all the given segment container to storage.");
     }
 
+    private int getAdminPortForHost(int configuredAdminPort, String ssHost) {
+        String[] ssHostParts = ssHost.split("-");
+        String ssHostIndex = ssHostParts[ssHostParts.length-1];
+        Preconditions.checkState(ssHostParts.length > 1 && !ssHostIndex.isEmpty() && StringUtils.isNumeric(ssHostIndex), "Unexpected host-name retrieved");
+        return  configuredAdminPort + Integer.parseInt(ssHostIndex);
+    }
+
     private CompletableFuture<WireCommands.StorageFlushed> flushContainerToStorage(AdminSegmentHelper adminSegmentHelper, int containerId) throws Exception {
-	String containerHost = this.getHostByContainer(containerId);
-        output("Flushing the Segment Container with containerId %d on host %s", containerId, containerHost);
-	// see if we resolve containerHost
-	try {
-	    InetAddress containerAddress = InetAddress.getByName(containerHost);
-            output("Container host %s, address %s", containerHost, containerAddress.getHostAddress());
-	    containerHost = containerAddress.getHostAddress();
-	} catch (UnknownHostException e) {
-            output("hostname could not be resolved %s", containerHost);
-	}
+        String ssHost = this.getHostByContainer(containerId);
         CompletableFuture<WireCommands.StorageFlushed> reply = adminSegmentHelper.flushToStorage(containerId,
-                new PravegaNodeUri(containerHost, getServiceConfig().getAdminGatewayPort()), super.authHelper.retrieveMasterToken());
+                new PravegaNodeUri(ssHost, getAdminPortForHost(getServiceConfig().getAdminGatewayPort(), ssHost)), super.authHelper.retrieveMasterToken());
         return reply.thenApply(result -> {
             output("Flushed the Segment Container with containerId %d to Storage.", containerId);
             return result;
@@ -114,7 +112,7 @@ public class FlushToStorageCommand extends ContainerCommand {
         if (host == null || host.isEmpty()) {
             throw new RuntimeException("No host found for given container: " + containerId);
         }
-        return extractHostName(host);
+        return host;
     }
 
     static String extractHostName(String host) {
