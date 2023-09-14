@@ -84,11 +84,11 @@ public class FlushToStorageCommand extends ContainerCommand {
     }
 
     private CompletableFuture<WireCommands.StorageFlushed> flushContainerToStorage(AdminSegmentHelper adminSegmentHelper, int containerId) throws Exception {
-	String containerHost = this.getHostByContainer(containerId)
+	String containerHost = this.getHostByContainer(containerId);
         output("Flushing the Segment Container with containerId %d on host %s", containerId, containerHost);
 	// see if we resolve containerHost
 	try {
-	    InetAddress containerAddress = InetAddress.getByName(containerHost)
+	    InetAddress containerAddress = InetAddress.getByName(containerHost);
             output("Container host %s", containerAddress.toString());
 	} catch (UnkownHostException e) {
             output("hostname could not be resolved %s", containerHost);
