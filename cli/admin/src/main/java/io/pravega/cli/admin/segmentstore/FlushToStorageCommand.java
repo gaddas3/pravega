@@ -28,6 +28,8 @@ import lombok.Cleanup;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.curator.framework.CuratorFramework;
 
+import java.net.InetAddress;
+import java.net.UnkownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -82,8 +84,17 @@ public class FlushToStorageCommand extends ContainerCommand {
     }
 
     private CompletableFuture<WireCommands.StorageFlushed> flushContainerToStorage(AdminSegmentHelper adminSegmentHelper, int containerId) throws Exception {
+	String containerHost = this.getHostByContainer(containerId)
+        output("Flushing the Segment Container with containerId %d on host %s", containerId, containerHost);
+	// see if we resolve containerHost
+	try {
+	    InetAddress containerAddress = InetAddress.getByName(containerHost)
+            output("Container host %s", containerAddress.toString());
+	} catch (UnkownHostException e) {
+            output("hostname could not be resolved %s", containerHost);
+	}
         CompletableFuture<WireCommands.StorageFlushed> reply = adminSegmentHelper.flushToStorage(containerId,
-                new PravegaNodeUri(this.getHostByContainer(containerId), getServiceConfig().getAdminGatewayPort()), super.authHelper.retrieveMasterToken());
+                new PravegaNodeUri(containerHost, getServiceConfig().getAdminGatewayPort()), super.authHelper.retrieveMasterToken());
         return reply.thenApply(result -> {
             output("Flushed the Segment Container with containerId %d to Storage.", containerId);
             return result;
