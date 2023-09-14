@@ -89,7 +89,8 @@ public class FlushToStorageCommand extends ContainerCommand {
 	// see if we resolve containerHost
 	try {
 	    InetAddress containerAddress = InetAddress.getByName(containerHost);
-            output("Container host %s", containerAddress.toString());
+            output("Container host %s, address %s", containerHost, containerAddress.getHostAddress());
+	    containerHost = containerAddress.getHostAddress();
 	} catch (UnknownHostException e) {
             output("hostname could not be resolved %s", containerHost);
 	}
