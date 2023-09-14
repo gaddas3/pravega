@@ -29,7 +29,7 @@ import org.apache.commons.lang.math.NumberUtils;
 import org.apache.curator.framework.CuratorFramework;
 
 import java.net.InetAddress;
-import java.net.UnkownHostException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -90,7 +90,7 @@ public class FlushToStorageCommand extends ContainerCommand {
 	try {
 	    InetAddress containerAddress = InetAddress.getByName(containerHost);
             output("Container host %s", containerAddress.toString());
-	} catch (UnkownHostException e) {
+	} catch (UnknownHostException e) {
             output("hostname could not be resolved %s", containerHost);
 	}
         CompletableFuture<WireCommands.StorageFlushed> reply = adminSegmentHelper.flushToStorage(containerId,
